@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Breja Calculator</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://apis.google.com/js/api.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // CONFIGURAÇÃO - PREENCHA AQUI
+        const CONFIG = {
+            apiKey: 'AIzaSyC8MEPV3y1vKuCqUsaq_QsnE48cz6olUn4',
+            spreadsheetId: '1Si2vj7KgRgLKOGSyVy7tWAAm6QFRrb_7pI4NsHo5jH4',
+            appsScriptUrl: 'https://script.google.com/macros/s/AKfycbwyE2GBwG5C3KyKdDjynmXiTlLPLy68kFNCWx7ZB3dQdcmDYJHhreGX751IEEHJORMUlw/exec',  // URL completa terminando com /exec
+            range: 'Cervejas!A:J'
+        };
+
+        function BeerCalculator() {
+            const [beers, setBeers] = useState([]);
+            const [loading, setLoading] = useState(false);
+            const [userName, setUserName] = useState(localStorage.getItem('userName') || '');
+            const [showNameModal, setShowNameModal] = useState(!localStorage.getItem('userName'));
+            const [formData, setFormData] = useState({
+                name: '',
+                store: '',
+                price: '',
+                isPack: false,
+                unitsPerPack: '12',
+                numberOfPacks: '1',
+                numberOfUnits: '1',
+                mlPerUnit: '350',
+                type: 'lata'
+            });
+
+            const mlOptions = {
+                lata: [
+                    { value: '269', label: '269ml' },
+                    { value: '350', label: '350ml' },
+                    { value: '473', label: '473ml' }
+                ],
+                longneck: [
+                    { value: '300', label: '300ml' },
+                    { value: '330', label: '330ml' },
+                    { value: '355', label: '355ml' }
+                ],
+                garrafa: [
+                    { value: '600', label: '600ml' },
+                    { value: '1000', label: '1 litro' }
+                ]
+            };
+
+            const handleTypeChange = (newType) => {
+                const firstMlOption = mlOptions[newType][0].value;
+                setFormData({
+                    ...formData,
+                    type: newType,
+                    mlPerUnit: firstMlOption
+                });
+            };
+
+            const saveUserName = () => {
+                if (userName.trim()) {
+                    localStorage.setItem('userName', userName);
+                    setShowNameModal(false);
+                }
+            };
+
+            // Carregar dados do Google Sheets
+            const loadFromSheets = async () => {
+                if (!CONFIG.apiKey || CONFIG.apiKey === 'SUA_API_KEY_AQUI') {
+                    console.log('⚠️ Configure a API Key primeiro!');
+                    return;
+                }
+
+                setLoading(true);
+                try {
+                    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${CONFIG.range}?key=${CONFIG.apiKey}`;
+                    console.log('📡 Carregando dados de:', url);
+                    
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    
+                    console.log('📥 Dados recebidos:', data);
+                    
+                    if (data.error) {
+                        console.error('❌ Erro da API:', data.error);
+                        alert(`Erro: ${data.error.message}`);
+                        setLoading(false);
+                        return;
+                    }
+                    
+                    if (data.values && data.values.length > 1) {
+                        const loadedBeers = data.values.slice(1).map((row, index) => {
+                            const beer = {
+                                id: Date.now() + index,
+                                addedBy: row[0] || '',
+                                name: row[1] || '',
+                                store: row[2] || '',
+                                price: parseFloat(row[3]) || 0,
+                                quantity: parseInt(row[4]) || 0,
+                                mlPerUnit: parseInt(row[5]) || 0,
+                                type: row[6] || 'lata',
+                                isPack: row[7] === 'true' || row[7] === true,
+                                packInfo: row[8] || null,
+                                timestamp: row[9] || ''
+                            };
+
+                            beer.totalMl = beer.quantity * beer.mlPerUnit;
+                            beer.totalLiters = beer.totalMl / 1000;
+                            beer.pricePerLiter = beer.price / beer.totalLiters;
+                            beer.pricePerUnit = beer.price / beer.quantity;
+
+                            return beer;
+                        });
+                        console.log('✅ Cervejas carregadas:', loadedBeers.length);
+                        setBeers(loadedBeers);
+                    } else {
+                        console.log('ℹ️ Nenhuma cerveja na planilha ainda');
+                        setBeers([]);
+                    }
+                } catch (error) {
+                    console.error('❌ Erro ao carregar:', error);
+                    alert('Erro ao carregar dados. Verifique o console (F12) para detalhes.');
+                }
+                setLoading(false);
+            };
+
+            // Salvar no Google Sheets
+            const saveToSheets = async (beer) => {
+                const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwyE2GBwG5C3KyKdDjynmXiTlLPLy68kFNCWx7ZB3dQdcmDYJHhreGX751IEEHJORMUlw/exec';  // URL do Apps Script
+                
+                try {
+                    const response = await fetch(SCRIPT_URL, {
+                        method: 'POST',
+                        mode: 'no-cors',  // IMPORTANTE: Adicione esta linha
+                        body: JSON.stringify({
+                            addedBy: beer.addedBy,
+                            name: beer.name,
+                            store: beer.store,
+                            price: beer.price,
+                            quantity: beer.quantity,
+                            mlPerUnit: beer.mlPerUnit,
+                            type: beer.type,
+                            isPack: beer.isPack,
+                            packInfo: beer.packInfo,
+                            timestamp: beer.timestamp
+                        })
+                    });
+                    
+                    // Com mode: 'no-cors', não conseguimos ler a resposta
+                    // Então vamos apenas assumir sucesso e recarregar
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // Esperar 1 segundo
+                    await loadFromSheets();
+                    // alert('✅ Cerveja adicionada!');
+                    
+                } catch (error) {
+                    console.error('Erro ao salvar:', error);
+                    alert('❌ Erro ao salvar. Tente novamente.');
+                }
+            };
+            // const saveToSheets = async (beer) => {
+            //     if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'https://script.google.com/macros/s/AKfycbwyE2GBwG5C3KyKdDjynmXiTlLPLy68kFNCWx7ZB3dQdcmDYJHhreGX751IEEHJORMUlw/exec') {
+            //         console.log('⚠️ Apps Script URL não configurada. Salvando apenas localmente.');
+            //         alert('⚠️ Configuração incompleta. Cerveja adicionada apenas nesta sessão.');
+            //         return;
+            //     }
+
+            //     try {
+            //         console.log('💾 Salvando cerveja:', beer);
+                    
+            //         const payload = {
+            //             addedBy: beer.addedBy,
+            //             name: beer.name,
+            //             store: beer.store,
+            //             price: beer.price,
+            //             quantity: beer.quantity,
+            //             mlPerUnit: beer.mlPerUnit,
+            //             type: beer.type,
+            //             isPack: beer.isPack,
+            //             packInfo: beer.packInfo || '',
+            //             timestamp: beer.timestamp
+            //         };
+                    
+            //         console.log('📤 Enviando para:', CONFIG.appsScriptUrl);
+            //         console.log('📦 Payload:', payload);
+                    
+            //         // Usando no-cors porque Google Apps Script tem CORS restrictions
+            //         await fetch(CONFIG.appsScriptUrl, {
+            //             method: 'POST',
+            //             mode: 'no-cors',
+            //             headers: {
+            //                 'Content-Type': 'application/json',
+            //             },
+            //             body: JSON.stringify(payload)
+            //         });
+                    
+            //         // Com no-cors, não podemos ler a resposta
+            //         // Então aguardamos um pouco e recarregamos
+            //         console.log('⏳ Aguardando salvamento...');
+            //         await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+            //         console.log('🔄 Recarregando dados...');
+            //         await loadFromSheets();
+                    
+            //         alert('✅ Cerveja adicionada com sucesso!');
+                    
+            //     } catch (error) {
+            //         console.error('❌ Erro ao salvar:', error);
+            //         alert('❌ Erro ao salvar. A cerveja foi adicionada localmente, mas não na planilha. Verifique o console (F12).');
+            //     }
+            // };
+
+            const addBeer = async () => {
+                if (!formData.name || !formData.price) {
+                    alert('Preencha pelo menos o nome e o preço!');
+                    return;
+                }
+
+                if (!userName) {
+                    setShowNameModal(true);
+                    return;
+                }
+
+                let totalPrice;
+                let totalQuantity;
+                let packInfo = null;
+
+                if (formData.isPack) {
+                    totalQuantity = parseInt(formData.unitsPerPack) * parseInt(formData.numberOfPacks);
+                    totalPrice = parseFloat(formData.price) * parseInt(formData.numberOfPacks);
+                    packInfo = `${formData.numberOfPacks}x pack de ${formData.unitsPerPack}`;
+                } else {
+                    totalQuantity = parseInt(formData.numberOfUnits);
+                    totalPrice = parseFloat(formData.price) * totalQuantity;
+                }
+
+                // Criar timestamp no formato brasileiro
+                const now = new Date();
+                const timestamp = now.toLocaleString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                const newBeer = {
+                    id: Date.now(),
+                    addedBy: userName,
+                    name: formData.name,
+                    store: formData.store,
+                    price: totalPrice,
+                    quantity: totalQuantity,
+                    mlPerUnit: parseInt(formData.mlPerUnit),
+                    type: formData.type,
+                    isPack: formData.isPack,
+                    packInfo: packInfo,
+                    timestamp: timestamp
+                };
+
+                newBeer.totalMl = newBeer.quantity * newBeer.mlPerUnit;
+                newBeer.totalLiters = newBeer.totalMl / 1000;
+                newBeer.pricePerLiter = newBeer.price / newBeer.totalLiters;
+                newBeer.pricePerUnit = newBeer.price / newBeer.quantity;
+
+                // Adicionar localmente primeiro
+                setBeers([...beers, newBeer]);
+                
+                // Tentar salvar no Sheets
+                await saveToSheets(newBeer);
+
+                // Limpar formulário
+                setFormData({
+                    name: '',
+                    store: '',
+                    price: '',
+                    isPack: false,
+                    unitsPerPack: '12',
+                    numberOfPacks: '1',
+                    numberOfUnits: '1',
+                    mlPerUnit: mlOptions[formData.type][0].value,
+                    type: formData.type
+                });
+            };
+
+            const deleteBeer = (id) => {
+                if (confirm('Tem certeza que deseja remover esta cerveja?')) {
+                    setBeers(beers.filter(beer => beer.id !== id));
+                    alert('⚠️ Cerveja removida localmente. Para remover da planilha, delete manualmente no Google Sheets.');
+                }
+            };
+
+            useEffect(() => {
+                loadFromSheets();
+                // Atualizar a cada 30 segundos
+                const interval = setInterval(loadFromSheets, 30000);
+                return () => clearInterval(interval);
+            }, []);
+
+            const sortedBeers = [...beers].sort((a, b) => a.pricePerLiter - b.pricePerLiter);
+            const bestDeal = sortedBeers[0];
+
+            // Verificar se está configurado
+            const isConfigured = CONFIG.apiKey !== 'SUA_API_KEY_AQUI' && 
+                                CONFIG.spreadsheetId !== 'SEU_SPREADSHEET_ID_AQUI';
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 p-4 md:p-8">
+                    {/* Modal de Nome */}
+                    {showNameModal && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-xl p-6 max-w-md w-full">
+                                <h3 className="text-xl font-bold text-gray-800 mb-4">Qual é o seu nome?</h3>
+                                <input
+                                    type="text"
+                                    value={userName}
+                                    onChange={(e) => setUserName(e.target.value)}
+                                    placeholder="Digite seu nome"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4"
+                                    onKeyPress={(e) => e.key === 'Enter' && saveUserName()}
+                                />
+                                <button
+                                    onClick={saveUserName}
+                                    className="w-full bg-amber-600 text-white py-2 rounded-lg font-semibold"
+                                >
+                                    Salvar
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Alerta de Configuração */}
+                    {!isConfigured && (
+                        <div className="max-w-4xl mx-auto mb-6 bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4">
+                            <h3 className="font-bold text-yellow-800 mb-2">⚠️ Configuração Necessária</h3>
+                            <p className="text-yellow-700 text-sm">
+                                Configure a API Key e o ID da planilha no código HTML para usar o Google Sheets.
+                                Consulte o arquivo TROUBLESHOOTING.md para instruções detalhadas.
+                            </p>
+                        </div>
+                    )}
+
+                    <div className="max-w-4xl mx-auto">
+                        {/* Header */}
+                        <div className="text-center mb-8">
+                            <div className="flex items-center justify-center gap-3 mb-2">
+                                <span className="text-4xl">🍺</span>
+                                <h1 className="text-4xl font-bold text-amber-900">Calculadora de Cerveja</h1>
+                            </div>
+                            <p className="text-amber-700">Escolham juntos o melhor custo-benefício!</p>
+                            {userName && (
+                                <p className="text-sm text-amber-600 mt-2">
+                                    Logado como: <strong>{userName}</strong>
+                                    <button
+                                        onClick={() => setShowNameModal(true)}
+                                        className="ml-2 text-xs underline"
+                                    >
+                                        trocar
+                                    </button>
+                                </p>
+                            )}
+                        </div>
+
+                        {/* Botão de Atualizar */}
+                        <div className="flex justify-end mb-4">
+                            <button
+                                onClick={loadFromSheets}
+                                disabled={loading || !isConfigured}
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {loading ? '⏳ Carregando...' : '🔄 Atualizar'}
+                            </button>
+                        </div>
+
+                        {/* Form */}
+                        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                            <h2 className="text-xl font-semibold text-gray-800 mb-4">Adicionar Cerveja</h2>
+                            
+                            {/* Toggle Pack/Unidade */}
+                            <div className="mb-6 flex justify-center">
+                                <div className="inline-flex rounded-lg border-2 border-amber-300 p-1 bg-amber-50">
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({...formData, isPack: false})}
+                                        className={`px-6 py-2 rounded-md font-medium transition-all ${
+                                            !formData.isPack 
+                                                ? 'bg-amber-600 text-white shadow-md' 
+                                                : 'text-amber-700 hover:bg-amber-100'
+                                        }`}
+                                    >
+                                        Preço por Unidade
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({...formData, isPack: true})}
+                                        className={`px-6 py-2 rounded-md font-medium transition-all ${
+                                            formData.isPack 
+                                                ? 'bg-amber-600 text-white shadow-md' 
+                                                : 'text-amber-700 hover:bg-amber-100'
+                                        }`}
+                                    >
+                                        Preço por Pack
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Nome/Marca
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={formData.name}
+                                        onChange={(e) => setFormData({...formData, name: e.target.value})}
+                                        placeholder="Ex: Brahma, Skol..."
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Mercado/Loja/App
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={formData.store}
+                                        onChange={(e) => setFormData({...formData, store: e.target.value})}
+                                        placeholder="Ex: Carrefour, Zé Delivery..."
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        {formData.isPack ? 'Preço do Pack (R$)' : 'Preço por Unidade (R$)'}
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={formData.price}
+                                        onChange={(e) => setFormData({...formData, price: e.target.value})}
+                                        placeholder={formData.isPack ? "Ex: 58.68" : "Ex: 4.89"}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Tipo de embalagem
+                                    </label>
+                                    <select
+                                        value={formData.type}
+                                        onChange={(e) => handleTypeChange(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                    >
+                                        <option value="lata">Lata</option>
+                                        <option value="longneck">Long Neck</option>
+                                        <option value="garrafa">Garrafa</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        ML por unidade
+                                    </label>
+                                    <select
+                                        value={formData.mlPerUnit}
+                                        onChange={(e) => setFormData({...formData, mlPerUnit: e.target.value})}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                    >
+                                        {mlOptions[formData.type].map(option => (
+                                            <option key={option.value} value={option.value}>
+                                                {option.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {formData.isPack ? (
+                                    <>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Unidades por pack
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={formData.unitsPerPack}
+                                                onChange={(e) => setFormData({...formData, unitsPerPack: e.target.value})}
+                                                placeholder="Ex: 6, 12, 24"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Quantidade de packs
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={formData.numberOfPacks}
+                                                onChange={(e) => setFormData({...formData, numberOfPacks: e.target.value})}
+                                                placeholder="Ex: 1, 2, 3"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                            />
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Quantidade de unidades
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={formData.numberOfUnits}
+                                            onChange={(e) => setFormData({...formData, numberOfUnits: e.target.value})}
+                                            placeholder="Ex: 6, 12, 24"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            <button
+                                onClick={addBeer}
+                                className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 rounded-lg transition-colors"
+                            >
+                                ➕ Adicionar Cerveja
+                            </button>
+                        </div>
+
+                        {/* Results */}
+                        {beers.length > 0 && (
+                            <div className="bg-white rounded-xl shadow-lg p-6">
+                                <h2 className="text-xl font-semibold text-gray-800 mb-4">Comparação</h2>
+                                
+                                {bestDeal && (
+                                    <div className="bg-green-50 border-2 border-green-500 rounded-lg p-4 mb-6">
+                                        <h3 className="font-bold text-green-800 mb-2">🏆 Melhor Custo-Benefício!</h3>
+                                        <p className="text-green-700">
+                                            <strong>{bestDeal.name}</strong> - R$ {bestDeal.pricePerLiter.toFixed(2)}/litro
+                                        </p>
+                                        {bestDeal.store && (
+                                            <p className="text-sm text-green-600 mt-1">
+                                                📍 {bestDeal.store}
+                                            </p>
+                                        )}
+                                        <p className="text-sm text-green-600 mt-1">
+                                            Adicionado por: {bestDeal.addedBy}
+                                        </p>
+                                    </div>
+                                )}
+
+                                <div className="space-y-3">
+                                    {sortedBeers.map((beer, index) => (
+                                        <div
+                                            key={beer.id}
+                                            className={`border-2 rounded-lg p-4 transition-all ${
+                                                beer.id === bestDeal?.id 
+                                                    ? 'border-green-500 bg-green-50' 
+                                                    : 'border-gray-200 bg-gray-50'
+                                            }`}
+                                        >
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div className="flex-1">
+                                                    <h3 className="font-bold text-lg text-gray-800">
+                                                        {index === 0 && '🏆 '}
+                                                        {beer.name}
+                                                    </h3>
+                                                    {beer.store && (
+                                                        <p className="text-sm text-blue-600 font-medium">
+                                                            📍 {beer.store}
+                                                        </p>
+                                                    )}
+                                                    <p className="text-sm text-gray-600">
+                                                        {beer.packInfo && <span className="text-amber-600">{beer.packInfo} • </span>}
+                                                        {beer.quantity}x {beer.mlPerUnit}ml ({beer.type})
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-1">
+                                                        Adicionado por: {beer.addedBy}
+                                                        {beer.timestamp && ` • ${beer.timestamp}`}
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    onClick={() => deleteBeer(beer.id)}
+                                                    className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded transition-colors"
+                                                    title="Remover cerveja"
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                                <div className="bg-white rounded p-2 border border-gray-200">
+                                                    <p className="text-gray-600 text-xs">Preço Total</p>
+                                                    <p className="font-semibold text-amber-700">R$ {beer.price.toFixed(2)}</p>
+                                                </div>
+                                                <div className="bg-white rounded p-2 border border-gray-200">
+                                                    <p className="text-gray-600 text-xs">Por Litro</p>
+                                                    <p className="font-semibold text-amber-700">R$ {beer.pricePerLiter.toFixed(2)}</p>
+                                                </div>
+                                                <div className="bg-white rounded p-2 border border-gray-200">
+                                                    <p className="text-gray-600 text-xs">Por Unidade</p>
+                                                    <p className="font-semibold text-amber-700">R$ {beer.pricePerUnit.toFixed(2)}</p>
+                                                </div>
+                                                <div className="bg-white rounded p-2 border border-gray-200">
+                                                    <p className="text-gray-600 text-xs">Total</p>
+                                                    <p className="font-semibold text-amber-700">{beer.totalLiters.toFixed(2)}L</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {beers.length === 0 && (
+                            <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+                                <span className="text-6xl">🍺</span>
+                                <p className="text-gray-500 mt-4">
+                                    {!isConfigured 
+                                        ? 'Configure a API Key e o ID da planilha para começar!'
+                                        : 'Nenhuma cerveja adicionada ainda!'}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<BeerCalculator />, document.getElementById('root'));
+    </script>
+</body>
+</html>
