@@ -104,12 +104,19 @@
                             // Debug: ver o valor bruto da planilha
                             console.log('Valor bruto da planilha (coluna D):', row[3], 'Tipo:', typeof row[3]);
                             
+                            // Converter vírgula para ponto (formato brasileiro para JS)
+                            let priceValue = 0;
+                            if (row[3]) {
+                                const priceStr = String(row[3]).replace(',', '.');
+                                priceValue = parseFloat(priceStr) || 0;
+                            }
+                            
                             const beer = {
                                 id: Date.now() + index,
                                 addedBy: row[0] || '',
                                 name: row[1] || '',
                                 store: row[2] || '',
-                                price: row[3] ? parseFloat(Number(row[3]).toFixed(2)) : 0,
+                                price: priceValue,
                                 quantity: parseInt(row[4]) || 0,
                                 mlPerUnit: parseInt(row[5]) || 0,
                                 type: row[6] || 'lata',
