@@ -49,7 +49,6 @@
                     { value: '473', label: '473ml' }
                 ],
                 longneck: [
-                    { value: '250', label: '250ml' },
                     { value: '300', label: '300ml' },
                     { value: '330', label: '330ml' },
                     { value: '355', label: '355ml' }
@@ -107,7 +106,7 @@
                                 addedBy: row[0] || '',
                                 name: row[1] || '',
                                 store: row[2] || '',
-                                price: parseFloat(row[3]) || 0,
+                                price: parseFloat(row[3]).toFixed(2) ? parseFloat(parseFloat(row[3]).toFixed(2)) : 0,
                                 quantity: parseInt(row[4]) || 0,
                                 mlPerUnit: parseInt(row[5]) || 0,
                                 type: row[6] || 'lata',
@@ -138,88 +137,56 @@
 
             // Salvar no Google Sheets
             const saveToSheets = async (beer) => {
-                const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwyE2GBwG5C3KyKdDjynmXiTlLPLy68kFNCWx7ZB3dQdcmDYJHhreGX751IEEHJORMUlw/exec';  // URL do Apps Script
-                
+                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'SUA_URL_DO_APPS_SCRIPT_AQUI') {
+                    console.log('⚠️ Apps Script URL não configurada. Salvando apenas localmente.');
+                    alert('⚠️ Configuração incompleta. Cerveja adicionada apenas nesta sessão.');
+                    return;
+                }
+
                 try {
-                    const response = await fetch(SCRIPT_URL, {
+                    console.log('💾 Salvando cerveja:', beer);
+                    
+                    const payload = {
+                        addedBy: beer.addedBy,
+                        name: beer.name,
+                        store: beer.store,
+                        price: parseFloat(beer.price.toFixed(2)),
+                        quantity: beer.quantity,
+                        mlPerUnit: beer.mlPerUnit,
+                        type: beer.type,
+                        isPack: beer.isPack,
+                        packInfo: beer.packInfo || '',
+                        timestamp: beer.timestamp
+                    };
+                    
+                    console.log('📤 Enviando para:', CONFIG.appsScriptUrl);
+                    console.log('📦 Payload:', payload);
+                    
+                    // Usando no-cors porque Google Apps Script tem CORS restrictions
+                    await fetch(CONFIG.appsScriptUrl, {
                         method: 'POST',
-                        mode: 'no-cors',  // IMPORTANTE: Adicione esta linha
-                        body: JSON.stringify({
-                            addedBy: beer.addedBy,
-                            name: beer.name,
-                            store: beer.store,
-                            price: beer.price,
-                            quantity: beer.quantity,
-                            mlPerUnit: beer.mlPerUnit,
-                            type: beer.type,
-                            isPack: beer.isPack,
-                            packInfo: beer.packInfo,
-                            timestamp: beer.timestamp
-                        })
+                        mode: 'no-cors',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(payload)
                     });
                     
-                    // Com mode: 'no-cors', não conseguimos ler a resposta
-                    // Então vamos apenas assumir sucesso e recarregar
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // Esperar 1 segundo
+                    // Com no-cors, não podemos ler a resposta
+                    // Então aguardamos um pouco e recarregamos
+                    console.log('⏳ Aguardando salvamento...');
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    console.log('🔄 Recarregando dados...');
                     await loadFromSheets();
-                    // alert('✅ Cerveja adicionada!');
+                    
+                    alert('✅ Cerveja adicionada com sucesso!');
                     
                 } catch (error) {
-                    console.error('Erro ao salvar:', error);
-                    alert('❌ Erro ao salvar. Tente novamente.');
+                    console.error('❌ Erro ao salvar:', error);
+                    alert('❌ Erro ao salvar. A cerveja foi adicionada localmente, mas não na planilha. Verifique o console (F12).');
                 }
             };
-            // const saveToSheets = async (beer) => {
-            //     if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'https://script.google.com/macros/s/AKfycbwyE2GBwG5C3KyKdDjynmXiTlLPLy68kFNCWx7ZB3dQdcmDYJHhreGX751IEEHJORMUlw/exec') {
-            //         console.log('⚠️ Apps Script URL não configurada. Salvando apenas localmente.');
-            //         alert('⚠️ Configuração incompleta. Cerveja adicionada apenas nesta sessão.');
-            //         return;
-            //     }
-
-            //     try {
-            //         console.log('💾 Salvando cerveja:', beer);
-                    
-            //         const payload = {
-            //             addedBy: beer.addedBy,
-            //             name: beer.name,
-            //             store: beer.store,
-            //             price: beer.price,
-            //             quantity: beer.quantity,
-            //             mlPerUnit: beer.mlPerUnit,
-            //             type: beer.type,
-            //             isPack: beer.isPack,
-            //             packInfo: beer.packInfo || '',
-            //             timestamp: beer.timestamp
-            //         };
-                    
-            //         console.log('📤 Enviando para:', CONFIG.appsScriptUrl);
-            //         console.log('📦 Payload:', payload);
-                    
-            //         // Usando no-cors porque Google Apps Script tem CORS restrictions
-            //         await fetch(CONFIG.appsScriptUrl, {
-            //             method: 'POST',
-            //             mode: 'no-cors',
-            //             headers: {
-            //                 'Content-Type': 'application/json',
-            //             },
-            //             body: JSON.stringify(payload)
-            //         });
-                    
-            //         // Com no-cors, não podemos ler a resposta
-            //         // Então aguardamos um pouco e recarregamos
-            //         console.log('⏳ Aguardando salvamento...');
-            //         await new Promise(resolve => setTimeout(resolve, 2000));
-                    
-            //         console.log('🔄 Recarregando dados...');
-            //         await loadFromSheets();
-                    
-            //         alert('✅ Cerveja adicionada com sucesso!');
-                    
-            //     } catch (error) {
-            //         console.error('❌ Erro ao salvar:', error);
-            //         alert('❌ Erro ao salvar. A cerveja foi adicionada localmente, mas não na planilha. Verifique o console (F12).');
-            //     }
-            // };
 
             const addBeer = async () => {
                 if (!formData.name || !formData.price) {
@@ -358,7 +325,7 @@
                                 <span className="text-4xl">🍺</span>
                                 <h1 className="text-4xl font-bold text-amber-900">Calculadora de Cerveja</h1>
                             </div>
-                            <p className="text-amber-700">Bora ficar fifty/fifty!</p>
+                            <p className="text-amber-700">Escolham juntos o melhor custo-benefício!</p>
                             {userName && (
                                 <p className="text-sm text-amber-600 mt-2">
                                     Logado como: <strong>{userName}</strong>
