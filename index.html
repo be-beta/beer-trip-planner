@@ -122,7 +122,9 @@
                                 type: row[6] || 'lata',
                                 isPack: row[7] === 'true' || row[7] === true,
                                 packInfo: row[8] || null,
-                                timestamp: row[9] || ''
+                                timestamp: row[9] || '',
+                                deleted: row[10] === 'true' || row[10] === true,
+                                rowIndex: index + 2  // +2 porque: +1 para slice(1) e +1 para header
                             };
 
                             console.log('Preço processado:', beer.price);
@@ -134,8 +136,11 @@
 
                             return beer;
                         });
-                        console.log('✅ Cervejas carregadas:', loadedBeers.length);
-                        setBeers(loadedBeers);
+                        
+                        // Filtrar apenas cervejas não deletadas
+                        const activeBeers = loadedBeers.filter(beer => !beer.deleted);
+                        console.log('✅ Cervejas carregadas:', loadedBeers.length, 'Ativas:', activeBeers.length);
+                        setBeers(activeBeers);
                     } else {
                         console.log('ℹ️ Nenhuma cerveja na planilha ainda');
                         setBeers([]);
@@ -168,7 +173,8 @@
                         type: beer.type,
                         isPack: beer.isPack,
                         packInfo: beer.packInfo || '',
-                        timestamp: beer.timestamp
+                        timestamp: beer.timestamp,
+                        deleted: false
                     };
                     
                     console.log('📤 Enviando para:', CONFIG.appsScriptUrl);
@@ -197,6 +203,45 @@
                 } catch (error) {
                     console.error('❌ Erro ao salvar:', error);
                     alert('❌ Erro ao salvar. A cerveja foi adicionada localmente, mas não na planilha. Verifique o console (F12).');
+                }
+            };
+
+            // Marcar cerveja como deletada no Google Sheets
+            const deleteFromSheets = async (beer) => {
+                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'SUA_URL_DO_APPS_SCRIPT_AQUI') {
+                    console.log('⚠️ Apps Script URL não configurada.');
+                    return;
+                }
+
+                try {
+                    console.log('🗑️ Marcando cerveja como deletada:', beer.name, 'Linha:', beer.rowIndex);
+                    
+                    const payload = {
+                        action: 'delete',
+                        rowIndex: beer.rowIndex
+                    };
+                    
+                    console.log('📤 Enviando para:', CONFIG.appsScriptUrl);
+                    console.log('📦 Payload:', payload);
+                    
+                    await fetch(CONFIG.appsScriptUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    console.log('⏳ Aguardando atualização...');
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    
+                    console.log('🔄 Recarregando dados...');
+                    await loadFromSheets();
+                    
+                } catch (error) {
+                    console.error('❌ Erro ao deletar:', error);
+                    alert('❌ Erro ao deletar. Verifique o console (F12).');
                 }
             };
 
@@ -273,10 +318,13 @@
                 });
             };
 
-            const deleteBeer = (id) => {
-                if (confirm('Tem certeza que deseja remover esta cerveja?')) {
-                    setBeers(beers.filter(beer => beer.id !== id));
-                    alert('⚠️ Cerveja removida localmente. Para remover da planilha, delete manualmente no Google Sheets.');
+            const deleteBeer = async (beer) => {
+                if (confirm(`Tem certeza que deseja remover "${beer.name}"?`)) {
+                    // Remover localmente primeiro para feedback rápido
+                    setBeers(beers.filter(b => b.id !== beer.id));
+                    
+                    // Marcar como deletado na planilha
+                    await deleteFromSheets(beer);
                 }
             };
 
@@ -571,7 +619,7 @@
                                                     </p>
                                                 </div>
                                                 <button
-                                                    onClick={() => deleteBeer(beer.id)}
+                                                    onClick={() => deleteBeer(beer)}
                                                     className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded transition-colors"
                                                     title="Remover cerveja"
                                                 >
