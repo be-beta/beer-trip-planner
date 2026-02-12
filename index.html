@@ -217,7 +217,7 @@
                     
                     if (data.values && data.values.length > 1) {
                         const loadedBeers = data.values.slice(1)
-                            .filter(row => row[10] === groupId && row[11] !== 'true' && row[11] !== 'TRUE' && row[11] !== 'VERDADEIRO' && row[11] !== true) // Filtrar pelo ID do grupo (coluna K) e não deletados (coluna L)
+                            .filter(row => row[10] === groupId && row[11] !== 'true' && row[11] !== true) // Filtrar pelo ID do grupo (coluna K) e não deletados (coluna L)
                             .map((row, index) => {
                                 let priceValue = 0;
                                 if (row[3]) {
@@ -264,7 +264,7 @@
 
             // Salvar no Google Sheets
             const saveToSheets = async (beer) => {
-                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'https://script.google.com/macros/s/AKfycbwyE2GBwG5C3KyKdDjynmXiTlLPLy68kFNCWx7ZB3dQdcmDYJHhreGX751IEEHJORMUlw/exec') {
+                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'SUA_URL_DO_APPS_SCRIPT_AQUI') {
                     console.log('⚠️ Apps Script URL não configurada.');
                     return;
                 }
@@ -372,7 +372,7 @@
 
             // Marcar cerveja como deletada
             const deleteFromSheets = async (beer) => {
-                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'https://script.google.com/macros/s/AKfycbwyE2GBwG5C3KyKdDjynmXiTlLPLy68kFNCWx7ZB3dQdcmDYJHhreGX751IEEHJORMUlw/exec') {
+                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'SUA_URL_DO_APPS_SCRIPT_AQUI') {
                     console.log('⚠️ Apps Script URL não configurada.');
                     return;
                 }
