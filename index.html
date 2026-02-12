@@ -37,6 +37,10 @@
             const [groupMode, setGroupMode] = useState('enter'); // 'create' ou 'enter'
             const [formGroupName, setFormGroupName] = useState('');
             const [formGroupCode, setFormGroupCode] = useState('');
+            const [showSuccess, setShowSuccess] = useState(false);
+            const [showError, setShowError] = useState('');
+            const [showGroupCode, setShowGroupCode] = useState(false);
+            const [showPassword, setShowPassword] = useState(false);
             
             const [formData, setFormData] = useState({
                 name: '',
@@ -91,7 +95,7 @@
             // Criar novo grupo
             const createGroup = async () => {
                 if (!formGroupName.trim() || !formGroupCode.trim()) {
-                    alert('Preencha o nome e código do grupo!');
+                    setShowError('Preencha o nome e código do grupo!');
                     return;
                 }
 
@@ -122,24 +126,18 @@
                     setGroupId(newGroupId);
                     setGroupName(formGroupName);
                     setShowGroupModal(false);
-
-                    alert(`Grupo criado! 
-Nome: ${formGroupName}
-Código: ${formGroupCode}
-ID: ${newGroupId}
-
-Compartilhe o nome e código com seus amigos!`);
+                    setShowSuccess(true);
 
                 } catch (error) {
                     console.error('Erro ao criar grupo:', error);
-                    alert('Erro ao criar grupo. Tente novamente.');
+                    setShowError('Erro ao criar grupo. Tente novamente.');
                 }
             };
 
             // Entrar em grupo existente
             const enterGroup = async () => {
                 if (!formGroupName.trim() || !formGroupCode.trim()) {
-                    alert('Preencha o nome e código do grupo!');
+                    setShowError('Preencha o nome e código do grupo!');
                     return;
                 }
 
@@ -166,17 +164,16 @@ Compartilhe o nome e código com seus amigos!`);
                             setGroupName(formGroupName);
                             setShowGroupModal(false);
 
-                            alert(`Bem-vindo ao grupo "${formGroupName}"!`);
                             loadFromSheets();
                         } else {
-                            alert('Grupo não encontrado! Verifique o nome e código.');
+                            setShowError('Grupo não encontrado! Verifique o nome e código.');
                         }
                     } else {
-                        alert('Nenhum grupo cadastrado ainda.');
+                        setShowError('Nenhum grupo cadastrado ainda.');
                     }
                 } catch (error) {
                     console.error('Erro ao entrar no grupo:', error);
-                    alert('Erro ao buscar grupo. Tente novamente.');
+                    setShowError('Erro ao buscar grupo. Tente novamente.');
                 }
             };
 
@@ -269,7 +266,6 @@ Compartilhe o nome e código com seus amigos!`);
             const saveToSheets = async (beer) => {
                 if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'SUA_URL_DO_APPS_SCRIPT_AQUI') {
                     console.log('⚠️ Apps Script URL não configurada.');
-                    alert('⚠️ Configuração incompleta.');
                     return;
                 }
 
@@ -301,17 +297,14 @@ Compartilhe o nome e código com seus amigos!`);
                     await new Promise(resolve => setTimeout(resolve, 2000));
                     await loadFromSheets();
                     
-                    alert('✅ Cerveja adicionada com sucesso!');
-                    
                 } catch (error) {
                     console.error('❌ Erro ao salvar:', error);
-                    alert('❌ Erro ao salvar.');
                 }
             };
 
             const addBeer = async () => {
                 if (!formData.name || !formData.price) {
-                    alert('Preencha pelo menos o nome e o preço!');
+                    setShowError('Preencha pelo menos o nome e o preço!');
                     return;
                 }
 
@@ -422,6 +415,13 @@ Compartilhe o nome e código com seus amigos!`);
                 }
             }, [groupId]);
 
+            useEffect(() => {
+                if (showError) {
+                    const timer = setTimeout(() => setShowError(''), 5000);
+                    return () => clearTimeout(timer);
+                }
+            }, [showError]);
+
             const sortedBeers = [...beers].sort((a, b) => a.pricePerLiter - b.pricePerLiter);
             const bestDeal = sortedBeers[0];
 
@@ -430,6 +430,61 @@ Compartilhe o nome e código com seus amigos!`);
 
             return (
                 <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 p-4 md:p-8">
+                    {/* Modal de Sucesso */}
+                    {showSuccess && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-xl p-6 max-w-md w-full">
+                                <div className="text-center">
+                                    <div className="text-6xl mb-4">🎉</div>
+                                    <h3 className="text-2xl font-bold text-gray-800 mb-2">Grupo criado!</h3>
+                                    <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 mb-4">
+                                        <p className="text-sm text-gray-600 mb-2">Compartilhe com seus amigos:</p>
+                                        <p className="font-semibold text-gray-800">Nome: {groupName}</p>
+                                        <p className="font-semibold text-gray-800">Código: {localStorage.getItem('groupCode')}</p>
+                                    </div>
+                                    <p className="text-sm text-gray-600 mb-4">
+                                        Seus amigos precisam dessas informações para entrar no grupo!
+                                    </p>
+                                    <button
+                                        onClick={() => setShowSuccess(false)}
+                                        className="w-full bg-amber-600 text-white py-2 rounded-lg font-semibold"
+                                    >
+                                        Começar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Toast de Erro */}
+                    {showError && (
+                        <div className="fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slide-in">
+                            <p>{showError}</p>
+                            <button
+                                onClick={() => setShowError('')}
+                                className="absolute top-1 right-2 text-white hover:text-gray-200"
+                            >
+                                ×
+                            </button>
+                        </div>
+                    )}
+
+                    <style>{`
+                        @keyframes slide-in {
+                            from {
+                                transform: translateX(100%);
+                                opacity: 0;
+                            }
+                            to {
+                                transform: translateX(0);
+                                opacity: 1;
+                            }
+                        }
+                        .animate-slide-in {
+                            animation: slide-in 0.3s ease-out;
+                        }
+                    `}</style>
+
                     {/* Modal de Grupo */}
                     {showGroupModal && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -479,14 +534,29 @@ Compartilhe o nome e código com seus amigos!`);
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
                                             Código do Grupo
                                         </label>
-                                        <input
-                                            type="text"
-                                            value={formGroupCode}
-                                            onChange={(e) => setFormGroupCode(e.target.value)}
-                                            placeholder="Ex: praia2026"
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                        />
+                                        <div className="relative">
+                                            <input
+                                                type={showPassword ? "text" : "password"}
+                                                value={formGroupCode}
+                                                onChange={(e) => setFormGroupCode(e.target.value)}
+                                                placeholder="Ex: praia2026"
+                                                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                                            >
+                                                {showPassword ? '👁️' : '👁️‍🗨️'}
+                                            </button>
+                                        </div>
                                     </div>
+
+                                    {showError && (
+                                        <div className="bg-red-50 border border-red-300 text-red-700 px-3 py-2 rounded-lg text-sm">
+                                            {showError}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <button
@@ -544,7 +614,19 @@ Compartilhe o nome e código com seus amigos!`);
                                 <h1 className="text-4xl font-bold text-amber-900">Calculadora de Cerveja</h1>
                             </div>
                             {groupName && (
-                                <p className="text-amber-700 text-xl font-semibold">{groupName}</p>
+                                <div className="flex items-center justify-center gap-2">
+                                    <p className="text-amber-700 text-xl font-semibold">{groupName}</p>
+                                    <button
+                                        onClick={() => setShowGroupCode(!showGroupCode)}
+                                        className="text-xs bg-amber-200 hover:bg-amber-300 text-amber-800 px-2 py-1 rounded transition-colors"
+                                        title={showGroupCode ? "Ocultar código" : "Mostrar código"}
+                                    >
+                                        {showGroupCode ? '👁️' : '🔒'}
+                                    </button>
+                                </div>
+                            )}
+                            {showGroupCode && (
+                                <p className="text-amber-600 text-sm">Código: {localStorage.getItem('groupCode')}</p>
                             )}
                             <p className="text-amber-600 text-sm">Escolham juntos o melhor custo-benefício!</p>
                             {userName && (
