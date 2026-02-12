@@ -40,7 +40,7 @@
             const [showSuccess, setShowSuccess] = useState(false);
             const [showError, setShowError] = useState('');
             const [showGroupCode, setShowGroupCode] = useState(false);
-            const [showPassword, setShowPassword] = useState(false);
+            const [groupConfirmation, setGroupConfirmation] = useState(null); // { groupId, groupName, groupCode }
             
             const [formData, setFormData] = useState({
                 name: '',
@@ -87,41 +87,47 @@
                 }
             };
 
-            // Gerar ID aleatório para grupo
+            // Gerar código semi-legível: primeiras letras do nome + 4 chars aleatórios
+            // Ex: "Viagem Praia 2026" → "VIA-7K3X"
+            const generateGroupCode = (name) => {
+                const prefix = name.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 3).padEnd(3, 'X');
+                const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+                const suffix = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+                return `${prefix}-${suffix}`;
+            };
+
             const generateGroupId = () => {
                 return Math.random().toString(36).substring(2, 10).toUpperCase();
             };
 
-            // Criar novo grupo
+            // Criar novo grupo — só precisa do nome, código é gerado automaticamente
             const createGroup = async () => {
-                if (!formGroupName.trim() || !formGroupCode.trim()) {
-                    setShowError('Preencha o nome e código do grupo!');
+                if (!formGroupName.trim()) {
+                    setShowError('Preencha o nome do grupo!');
                     return;
                 }
 
                 const newGroupId = generateGroupId();
+                const newGroupCode = generateGroupCode(formGroupName);
                 
                 try {
                     const payload = {
                         action: 'create_group',
                         groupId: newGroupId,
                         groupName: formGroupName,
-                        groupCode: formGroupCode
+                        groupCode: newGroupCode
                     };
 
                     await fetch(CONFIG.appsScriptUrl, {
                         method: 'POST',
                         mode: 'no-cors',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
 
-                    // Salvar localmente
                     localStorage.setItem('groupId', newGroupId);
                     localStorage.setItem('groupName', formGroupName);
-                    localStorage.setItem('groupCode', formGroupCode);
+                    localStorage.setItem('groupCode', newGroupCode);
                     
                     setGroupId(newGroupId);
                     setGroupName(formGroupName);
@@ -134,47 +140,49 @@
                 }
             };
 
-            // Entrar em grupo existente
-            const enterGroup = async () => {
-                if (!formGroupName.trim() || !formGroupCode.trim()) {
-                    setShowError('Preencha o nome e código do grupo!');
+            // Buscar grupo pelo código e exibir confirmação
+            const lookupGroup = async () => {
+                if (!formGroupCode.trim()) {
+                    setShowError('Digite o código do grupo!');
                     return;
                 }
 
                 try {
-                    // Carregar grupos da planilha
                     const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${CONFIG.groupsRange}?key=${CONFIG.apiKey}`;
                     const response = await fetch(url);
                     const data = await response.json();
 
                     if (data.values && data.values.length > 1) {
-                        // Procurar grupo
-                        const group = data.values.slice(1).find(row => 
-                            row[1] === formGroupName && row[2] === formGroupCode
+                        const group = data.values.slice(1).find(row =>
+                            String(row[2]).trim().toUpperCase() === formGroupCode.trim().toUpperCase()
                         );
 
                         if (group) {
-                            const foundGroupId = group[0];
-                            
-                            localStorage.setItem('groupId', foundGroupId);
-                            localStorage.setItem('groupName', formGroupName);
-                            localStorage.setItem('groupCode', formGroupCode);
-                            
-                            setGroupId(foundGroupId);
-                            setGroupName(formGroupName);
-                            setShowGroupModal(false);
-
-                            loadFromSheets();
+                            setGroupConfirmation({ groupId: group[0], groupName: group[1], groupCode: group[2] });
+                            setShowError('');
                         } else {
-                            setShowError('Grupo não encontrado! Verifique o nome e código.');
+                            setShowError('Código não encontrado! Verifique e tente novamente.');
                         }
                     } else {
                         setShowError('Nenhum grupo cadastrado ainda.');
                     }
                 } catch (error) {
-                    console.error('Erro ao entrar no grupo:', error);
+                    console.error('Erro ao buscar grupo:', error);
                     setShowError('Erro ao buscar grupo. Tente novamente.');
                 }
+            };
+
+            // Confirmar entrada no grupo após visualizar o nome
+            const confirmEnterGroup = () => {
+                const { groupId: foundId, groupName: foundName, groupCode: foundCode } = groupConfirmation;
+                localStorage.setItem('groupId', foundId);
+                localStorage.setItem('groupName', foundName);
+                localStorage.setItem('groupCode', foundCode);
+                setGroupId(foundId);
+                setGroupName(foundName);
+                setGroupConfirmation(null);
+                setShowGroupModal(false);
+                loadFromSheets();
             };
 
             // Sair do grupo
@@ -443,12 +451,12 @@
                                     <div className="text-6xl mb-4">🎉</div>
                                     <h3 className="text-2xl font-bold text-gray-800 mb-2">Grupo criado!</h3>
                                     <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 mb-4">
-                                        <p className="text-sm text-gray-600 mb-2">Compartilhe com seus amigos:</p>
-                                        <p className="font-semibold text-gray-800">Nome: {groupName}</p>
-                                        <p className="font-semibold text-gray-800">Código: {localStorage.getItem('groupCode')}</p>
+                                        <p className="text-sm text-gray-600 mb-2">Compartilhe este código com seus amigos:</p>
+                                        <p className="text-3xl font-bold font-mono tracking-widest text-amber-700 my-2">{localStorage.getItem('groupCode')}</p>
+                                        <p className="text-sm text-gray-500">{groupName}</p>
                                     </div>
                                     <p className="text-sm text-gray-600 mb-4">
-                                        Seus amigos precisam dessas informações para entrar no grupo!
+                                        Seus amigos só precisam do código para entrar no grupo!
                                     </p>
                                     <button
                                         onClick={() => setShowSuccess(false)}
@@ -491,16 +499,16 @@
                     `}</style>
 
                     {/* Modal de Grupo */}
-                    {showGroupModal && (
+                    {showGroupModal && !groupConfirmation && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                             <div className="bg-white rounded-xl p-6 max-w-md w-full">
                                 <h3 className="text-2xl font-bold text-gray-800 mb-4 text-center">
                                     🍺 Calculadora de Cerveja
                                 </h3>
                                 
-                                <div className="flex gap-2 mb-4">
+                                <div className="flex gap-2 mb-6">
                                     <button
-                                        onClick={() => setGroupMode('enter')}
+                                        onClick={() => { setGroupMode('enter'); setShowError(''); }}
                                         className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
                                             groupMode === 'enter'
                                                 ? 'bg-amber-600 text-white'
@@ -510,7 +518,7 @@
                                         Entrar em Grupo
                                     </button>
                                     <button
-                                        onClick={() => setGroupMode('create')}
+                                        onClick={() => { setGroupMode('create'); setShowError(''); }}
                                         className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
                                             groupMode === 'create'
                                                 ? 'bg-amber-600 text-white'
@@ -521,61 +529,97 @@
                                     </button>
                                 </div>
 
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Nome do Grupo
-                                        </label>
-                                        <input
-                                            type="text"
-                                            value={formGroupName}
-                                            onChange={(e) => setFormGroupName(e.target.value)}
-                                            placeholder="Ex: Viagem Praia 2026"
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Código do Grupo
-                                        </label>
-                                        <div className="relative">
+                                {groupMode === 'create' ? (
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Nome do Grupo
+                                            </label>
                                             <input
-                                                type={showPassword ? "text" : "password"}
-                                                value={formGroupCode}
-                                                onChange={(e) => setFormGroupCode(e.target.value)}
-                                                placeholder="Ex: praia2026"
-                                                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg"
+                                                type="text"
+                                                value={formGroupName}
+                                                onChange={(e) => setFormGroupName(e.target.value)}
+                                                onKeyPress={(e) => e.key === 'Enter' && createGroup()}
+                                                placeholder="Ex: Viagem Praia 2026"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                                autoFocus
                                             />
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowPassword(!showPassword)}
-                                                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                                            >
-                                                {showPassword ? '👁️' : '👁️‍🗨️'}
-                                            </button>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                O código de acesso será gerado automaticamente.
+                                            </p>
                                         </div>
+                                        {showError && (
+                                            <div className="bg-red-50 border border-red-300 text-red-700 px-3 py-2 rounded-lg text-sm">
+                                                {showError}
+                                            </div>
+                                        )}
+                                        <button
+                                            onClick={createGroup}
+                                            className="w-full bg-amber-600 text-white py-3 rounded-lg font-semibold mt-2 hover:bg-amber-700"
+                                        >
+                                            ✨ Criar Grupo
+                                        </button>
                                     </div>
-
-                                    {showError && (
-                                        <div className="bg-red-50 border border-red-300 text-red-700 px-3 py-2 rounded-lg text-sm">
-                                            {showError}
+                                ) : (
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Código do Grupo
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={formGroupCode}
+                                                onChange={(e) => setFormGroupCode(e.target.value.toUpperCase())}
+                                                onKeyPress={(e) => e.key === 'Enter' && lookupGroup()}
+                                                placeholder="Ex: VIA-7K3X"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono tracking-widest text-center text-lg"
+                                                autoFocus
+                                            />
                                         </div>
-                                    )}
-                                </div>
-
-                                <button
-                                    onClick={groupMode === 'create' ? createGroup : enterGroup}
-                                    className="w-full bg-amber-600 text-white py-3 rounded-lg font-semibold mt-4 hover:bg-amber-700"
-                                >
-                                    {groupMode === 'create' ? '✨ Criar Grupo' : '🚪 Entrar no Grupo'}
-                                </button>
-
-                                {groupMode === 'create' && (
-                                    <p className="text-xs text-gray-500 mt-3 text-center">
-                                        Um ID único será gerado automaticamente para seu grupo
-                                    </p>
+                                        {showError && (
+                                            <div className="bg-red-50 border border-red-300 text-red-700 px-3 py-2 rounded-lg text-sm">
+                                                {showError}
+                                            </div>
+                                        )}
+                                        <button
+                                            onClick={lookupGroup}
+                                            className="w-full bg-amber-600 text-white py-3 rounded-lg font-semibold mt-2 hover:bg-amber-700"
+                                        >
+                                            🔍 Buscar Grupo
+                                        </button>
+                                    </div>
                                 )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Modal de Confirmação de Entrada no Grupo */}
+                    {groupConfirmation && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-xl p-6 max-w-md w-full">
+                                <div className="text-center">
+                                    <div className="text-5xl mb-3">🍺</div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-1">Grupo encontrado!</h3>
+                                    <p className="text-gray-500 text-sm mb-4">É esse o grupo que você quer entrar?</p>
+                                    <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 mb-6">
+                                        <p className="text-2xl font-bold text-amber-900">{groupConfirmation.groupName}</p>
+                                        <p className="text-sm text-amber-600 font-mono mt-1">{groupConfirmation.groupCode}</p>
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => { setGroupConfirmation(null); setFormGroupCode(''); }}
+                                            className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-300"
+                                        >
+                                            ← Voltar
+                                        </button>
+                                        <button
+                                            onClick={confirmEnterGroup}
+                                            className="flex-1 bg-amber-600 text-white py-2 rounded-lg font-semibold hover:bg-amber-700"
+                                        >
+                                            ✅ Entrar
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}
