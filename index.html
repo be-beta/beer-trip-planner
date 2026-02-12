@@ -337,7 +337,7 @@
                     packInfo = `${formData.numberOfPacks}x pack de ${formData.unitsPerPack}`;
                 } else {
                     totalQuantity = parseInt(formData.numberOfUnits);
-                    totalPrice = parseFloat(formData.price);
+                    totalPrice = parseFloat(formData.price) * totalQuantity;
                 }
 
                 const now = new Date();
@@ -366,7 +366,9 @@
                 newBeer.totalMl = newBeer.quantity * newBeer.mlPerUnit;
                 newBeer.totalLiters = newBeer.totalMl / 1000;
                 newBeer.pricePerLiter = newBeer.price / newBeer.totalLiters;
-                newBeer.pricePerUnit = newBeer.price / newBeer.quantity;
+                newBeer.pricePerUnit = formData.isPack
+                    ? newBeer.price / newBeer.quantity
+                    : parseFloat(formData.price);
 
                 setBeers([...beers, newBeer]);
                 await saveToSheets(newBeer);
