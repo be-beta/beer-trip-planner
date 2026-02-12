@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Breja Calculator</title>
+    <title>Calculadora de Cerveja - Grupo</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍺</text></svg>">
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -22,7 +22,8 @@
             apiKey: 'AIzaSyC8MEPV3y1vKuCqUsaq_QsnE48cz6olUn4',
             spreadsheetId: '1Si2vj7KgRgLKOGSyVy7tWAAm6QFRrb_7pI4NsHo5jH4',
             appsScriptUrl: 'https://script.google.com/macros/s/AKfycbwyE2GBwG5C3KyKdDjynmXiTlLPLy68kFNCWx7ZB3dQdcmDYJHhreGX751IEEHJORMUlw/exec',  // URL completa terminando com /exec
-            range: 'Cervejas!A:J'
+            beersRange: 'Cervejas!A:L',
+            groupsRange: 'Grupos!A:C'
         };
 
         function BeerCalculator() {
@@ -30,6 +31,13 @@
             const [loading, setLoading] = useState(false);
             const [userName, setUserName] = useState(localStorage.getItem('userName') || '');
             const [showNameModal, setShowNameModal] = useState(!localStorage.getItem('userName'));
+            const [showGroupModal, setShowGroupModal] = useState(!localStorage.getItem('groupId'));
+            const [groupId, setGroupId] = useState(localStorage.getItem('groupId') || '');
+            const [groupName, setGroupName] = useState(localStorage.getItem('groupName') || '');
+            const [groupMode, setGroupMode] = useState('enter'); // 'create' ou 'enter'
+            const [formGroupName, setFormGroupName] = useState('');
+            const [formGroupCode, setFormGroupCode] = useState('');
+            
             const [formData, setFormData] = useState({
                 name: '',
                 store: '',
@@ -75,6 +83,116 @@
                 }
             };
 
+            // Gerar ID aleatório para grupo
+            const generateGroupId = () => {
+                return Math.random().toString(36).substring(2, 10).toUpperCase();
+            };
+
+            // Criar novo grupo
+            const createGroup = async () => {
+                if (!formGroupName.trim() || !formGroupCode.trim()) {
+                    alert('Preencha o nome e código do grupo!');
+                    return;
+                }
+
+                const newGroupId = generateGroupId();
+                
+                try {
+                    const payload = {
+                        action: 'create_group',
+                        groupId: newGroupId,
+                        groupName: formGroupName,
+                        groupCode: formGroupCode
+                    };
+
+                    await fetch(CONFIG.appsScriptUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    // Salvar localmente
+                    localStorage.setItem('groupId', newGroupId);
+                    localStorage.setItem('groupName', formGroupName);
+                    localStorage.setItem('groupCode', formGroupCode);
+                    
+                    setGroupId(newGroupId);
+                    setGroupName(formGroupName);
+                    setShowGroupModal(false);
+
+                    alert(`Grupo criado! 
+Nome: ${formGroupName}
+Código: ${formGroupCode}
+ID: ${newGroupId}
+
+Compartilhe o nome e código com seus amigos!`);
+
+                } catch (error) {
+                    console.error('Erro ao criar grupo:', error);
+                    alert('Erro ao criar grupo. Tente novamente.');
+                }
+            };
+
+            // Entrar em grupo existente
+            const enterGroup = async () => {
+                if (!formGroupName.trim() || !formGroupCode.trim()) {
+                    alert('Preencha o nome e código do grupo!');
+                    return;
+                }
+
+                try {
+                    // Carregar grupos da planilha
+                    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${CONFIG.groupsRange}?key=${CONFIG.apiKey}`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+
+                    if (data.values && data.values.length > 1) {
+                        // Procurar grupo
+                        const group = data.values.slice(1).find(row => 
+                            row[1] === formGroupName && row[2] === formGroupCode
+                        );
+
+                        if (group) {
+                            const foundGroupId = group[0];
+                            
+                            localStorage.setItem('groupId', foundGroupId);
+                            localStorage.setItem('groupName', formGroupName);
+                            localStorage.setItem('groupCode', formGroupCode);
+                            
+                            setGroupId(foundGroupId);
+                            setGroupName(formGroupName);
+                            setShowGroupModal(false);
+
+                            alert(`Bem-vindo ao grupo "${formGroupName}"!`);
+                            loadFromSheets();
+                        } else {
+                            alert('Grupo não encontrado! Verifique o nome e código.');
+                        }
+                    } else {
+                        alert('Nenhum grupo cadastrado ainda.');
+                    }
+                } catch (error) {
+                    console.error('Erro ao entrar no grupo:', error);
+                    alert('Erro ao buscar grupo. Tente novamente.');
+                }
+            };
+
+            // Sair do grupo
+            const leaveGroup = () => {
+                if (confirm('Tem certeza que deseja sair do grupo?')) {
+                    localStorage.removeItem('groupId');
+                    localStorage.removeItem('groupName');
+                    localStorage.removeItem('groupCode');
+                    setGroupId('');
+                    setGroupName('');
+                    setBeers([]);
+                    setShowGroupModal(true);
+                }
+            };
+
             // Carregar dados do Google Sheets
             const loadFromSheets = async () => {
                 if (!CONFIG.apiKey || CONFIG.apiKey === 'SUA_API_KEY_AQUI') {
@@ -82,15 +200,16 @@
                     return;
                 }
 
+                if (!groupId) {
+                    console.log('⚠️ Nenhum grupo selecionado');
+                    return;
+                }
+
                 setLoading(true);
                 try {
-                    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${CONFIG.range}?key=${CONFIG.apiKey}`;
-                    console.log('📡 Carregando dados de:', url);
-                    
+                    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.spreadsheetId}/values/${CONFIG.beersRange}?key=${CONFIG.apiKey}`;
                     const response = await fetch(url);
                     const data = await response.json();
-                    
-                    console.log('📥 Dados recebidos:', data);
                     
                     if (data.error) {
                         console.error('❌ Erro da API:', data.error);
@@ -100,54 +219,48 @@
                     }
                     
                     if (data.values && data.values.length > 1) {
-                        const loadedBeers = data.values.slice(1).map((row, index) => {
-                            // Debug: ver o valor bruto da planilha
-                            console.log('Valor bruto da planilha (coluna D):', row[3], 'Tipo:', typeof row[3]);
-                            
-                            // Converter vírgula para ponto (formato brasileiro para JS)
-                            let priceValue = 0;
-                            if (row[3]) {
-                                const priceStr = String(row[3]).replace(',', '.');
-                                priceValue = parseFloat(priceStr) || 0;
-                            }
-                            
-                            const beer = {
-                                id: Date.now() + index,
-                                addedBy: row[0] || '',
-                                name: row[1] || '',
-                                store: row[2] || '',
-                                price: priceValue,
-                                quantity: parseInt(row[4]) || 0,
-                                mlPerUnit: parseInt(row[5]) || 0,
-                                type: row[6] || 'lata',
-                                isPack: row[7] === 'true' || row[7] === true,
-                                packInfo: row[8] || null,
-                                timestamp: row[9] || '',
-                                deleted: row[10] === 'true' || row[10] === true,
-                                rowIndex: index + 2  // +2 porque: +1 para slice(1) e +1 para header
-                            };
+                        const loadedBeers = data.values.slice(1)
+                            .filter(row => row[10] === groupId && row[11] !== 'true' && row[11] !== true) // Filtrar pelo ID do grupo (coluna K) e não deletados (coluna L)
+                            .map((row, index) => {
+                                let priceValue = 0;
+                                if (row[3]) {
+                                    const priceStr = String(row[3]).replace(',', '.');
+                                    priceValue = parseFloat(priceStr) || 0;
+                                }
+                                
+                                const beer = {
+                                    id: Date.now() + index,
+                                    addedBy: row[0] || '',
+                                    name: row[1] || '',
+                                    store: row[2] || '',
+                                    price: priceValue,
+                                    quantity: parseInt(row[4]) || 0,
+                                    mlPerUnit: parseInt(row[5]) || 0,
+                                    type: row[6] || 'lata',
+                                    isPack: row[7] === 'true' || row[7] === true,
+                                    packInfo: row[8] || null,
+                                    timestamp: row[9] || '',
+                                    groupId: row[10] || '',
+                                    deleted: row[11] === 'true' || row[11] === true,
+                                    rowIndex: index + 2
+                                };
 
-                            console.log('Preço processado:', beer.price);
+                                beer.totalMl = beer.quantity * beer.mlPerUnit;
+                                beer.totalLiters = beer.totalMl / 1000;
+                                beer.pricePerLiter = beer.price / beer.totalLiters;
+                                beer.pricePerUnit = beer.price / beer.quantity;
 
-                            beer.totalMl = beer.quantity * beer.mlPerUnit;
-                            beer.totalLiters = beer.totalMl / 1000;
-                            beer.pricePerLiter = beer.price / beer.totalLiters;
-                            beer.pricePerUnit = beer.price / beer.quantity;
-
-                            return beer;
-                        });
+                                return beer;
+                            });
                         
-                        // Filtrar apenas cervejas não deletadas
-                        const activeBeers = loadedBeers.filter(beer => !beer.deleted);
-                        console.log('✅ Cervejas carregadas:', loadedBeers.length, 'Ativas:', activeBeers.length);
-                        setBeers(activeBeers);
+                        console.log('✅ Cervejas carregadas:', loadedBeers.length);
+                        setBeers(loadedBeers);
                     } else {
-                        console.log('ℹ️ Nenhuma cerveja na planilha ainda');
                         setBeers([]);
                     }
                 } catch (error) {
                     console.error('❌ Erro ao carregar:', error);
-                    alert('Erro ao carregar dados. Verifique o console (F12) para detalhes.');
+                    alert('Erro ao carregar dados.');
                 }
                 setLoading(false);
             };
@@ -155,15 +268,14 @@
             // Salvar no Google Sheets
             const saveToSheets = async (beer) => {
                 if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'SUA_URL_DO_APPS_SCRIPT_AQUI') {
-                    console.log('⚠️ Apps Script URL não configurada. Salvando apenas localmente.');
-                    alert('⚠️ Configuração incompleta. Cerveja adicionada apenas nesta sessão.');
+                    console.log('⚠️ Apps Script URL não configurada.');
+                    alert('⚠️ Configuração incompleta.');
                     return;
                 }
 
                 try {
-                    console.log('💾 Salvando cerveja:', beer);
-                    
                     const payload = {
+                        action: 'add_beer',
                         addedBy: beer.addedBy,
                         name: beer.name,
                         store: beer.store,
@@ -174,13 +286,9 @@
                         isPack: beer.isPack,
                         packInfo: beer.packInfo || '',
                         timestamp: beer.timestamp,
-                        deleted: false
+                        groupId: groupId
                     };
                     
-                    console.log('📤 Enviando para:', CONFIG.appsScriptUrl);
-                    console.log('📦 Payload:', payload);
-                    
-                    // Usando no-cors porque Google Apps Script tem CORS restrictions
                     await fetch(CONFIG.appsScriptUrl, {
                         method: 'POST',
                         mode: 'no-cors',
@@ -190,58 +298,14 @@
                         body: JSON.stringify(payload)
                     });
                     
-                    // Com no-cors, não podemos ler a resposta
-                    // Então aguardamos um pouco e recarregamos
-                    console.log('⏳ Aguardando salvamento...');
                     await new Promise(resolve => setTimeout(resolve, 2000));
-                    
-                    console.log('🔄 Recarregando dados...');
                     await loadFromSheets();
                     
                     alert('✅ Cerveja adicionada com sucesso!');
                     
                 } catch (error) {
                     console.error('❌ Erro ao salvar:', error);
-                    alert('❌ Erro ao salvar. A cerveja foi adicionada localmente, mas não na planilha. Verifique o console (F12).');
-                }
-            };
-
-            // Marcar cerveja como deletada no Google Sheets
-            const deleteFromSheets = async (beer) => {
-                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'SUA_URL_DO_APPS_SCRIPT_AQUI') {
-                    console.log('⚠️ Apps Script URL não configurada.');
-                    return;
-                }
-
-                try {
-                    console.log('🗑️ Marcando cerveja como deletada:', beer.name, 'Linha:', beer.rowIndex);
-                    
-                    const payload = {
-                        action: 'delete',
-                        rowIndex: beer.rowIndex
-                    };
-                    
-                    console.log('📤 Enviando para:', CONFIG.appsScriptUrl);
-                    console.log('📦 Payload:', payload);
-                    
-                    await fetch(CONFIG.appsScriptUrl, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(payload)
-                    });
-                    
-                    console.log('⏳ Aguardando atualização...');
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    
-                    console.log('🔄 Recarregando dados...');
-                    await loadFromSheets();
-                    
-                } catch (error) {
-                    console.error('❌ Erro ao deletar:', error);
-                    alert('❌ Erro ao deletar. Verifique o console (F12).');
+                    alert('❌ Erro ao salvar.');
                 }
             };
 
@@ -269,7 +333,6 @@
                     totalPrice = parseFloat(formData.price) * totalQuantity;
                 }
 
-                // Criar timestamp no formato brasileiro
                 const now = new Date();
                 const timestamp = now.toLocaleString('pt-BR', {
                     day: '2-digit',
@@ -298,13 +361,9 @@
                 newBeer.pricePerLiter = newBeer.price / newBeer.totalLiters;
                 newBeer.pricePerUnit = newBeer.price / newBeer.quantity;
 
-                // Adicionar localmente primeiro
                 setBeers([...beers, newBeer]);
-                
-                // Tentar salvar no Sheets
                 await saveToSheets(newBeer);
 
-                // Limpar formulário
                 setFormData({
                     name: '',
                     store: '',
@@ -318,34 +377,136 @@
                 });
             };
 
+            // Marcar cerveja como deletada
+            const deleteFromSheets = async (beer) => {
+                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'SUA_URL_DO_APPS_SCRIPT_AQUI') {
+                    console.log('⚠️ Apps Script URL não configurada.');
+                    return;
+                }
+
+                try {
+                    const payload = {
+                        action: 'delete_beer',
+                        rowIndex: beer.rowIndex
+                    };
+                    
+                    await fetch(CONFIG.appsScriptUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    await loadFromSheets();
+                    
+                } catch (error) {
+                    console.error('❌ Erro ao deletar:', error);
+                }
+            };
+
             const deleteBeer = async (beer) => {
                 if (confirm(`Tem certeza que deseja remover "${beer.name}"?`)) {
-                    // Remover localmente primeiro para feedback rápido
                     setBeers(beers.filter(b => b.id !== beer.id));
-                    
-                    // Marcar como deletado na planilha
                     await deleteFromSheets(beer);
                 }
             };
 
             useEffect(() => {
-                loadFromSheets();
-                // Atualizar a cada 30 segundos
-                const interval = setInterval(loadFromSheets, 30000);
-                return () => clearInterval(interval);
-            }, []);
+                if (groupId) {
+                    loadFromSheets();
+                    const interval = setInterval(loadFromSheets, 30000);
+                    return () => clearInterval(interval);
+                }
+            }, [groupId]);
 
             const sortedBeers = [...beers].sort((a, b) => a.pricePerLiter - b.pricePerLiter);
             const bestDeal = sortedBeers[0];
 
-            // Verificar se está configurado
             const isConfigured = CONFIG.apiKey !== 'SUA_API_KEY_AQUI' && 
                                 CONFIG.spreadsheetId !== 'SEU_SPREADSHEET_ID_AQUI';
 
             return (
                 <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 p-4 md:p-8">
+                    {/* Modal de Grupo */}
+                    {showGroupModal && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-xl p-6 max-w-md w-full">
+                                <h3 className="text-2xl font-bold text-gray-800 mb-4 text-center">
+                                    🍺 Calculadora de Cerveja
+                                </h3>
+                                
+                                <div className="flex gap-2 mb-4">
+                                    <button
+                                        onClick={() => setGroupMode('enter')}
+                                        className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
+                                            groupMode === 'enter'
+                                                ? 'bg-amber-600 text-white'
+                                                : 'bg-gray-200 text-gray-700'
+                                        }`}
+                                    >
+                                        Entrar em Grupo
+                                    </button>
+                                    <button
+                                        onClick={() => setGroupMode('create')}
+                                        className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
+                                            groupMode === 'create'
+                                                ? 'bg-amber-600 text-white'
+                                                : 'bg-gray-200 text-gray-700'
+                                        }`}
+                                    >
+                                        Criar Grupo
+                                    </button>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Nome do Grupo
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formGroupName}
+                                            onChange={(e) => setFormGroupName(e.target.value)}
+                                            placeholder="Ex: Viagem Praia 2026"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Código do Grupo
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formGroupCode}
+                                            onChange={(e) => setFormGroupCode(e.target.value)}
+                                            placeholder="Ex: praia2026"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                        />
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={groupMode === 'create' ? createGroup : enterGroup}
+                                    className="w-full bg-amber-600 text-white py-3 rounded-lg font-semibold mt-4 hover:bg-amber-700"
+                                >
+                                    {groupMode === 'create' ? '✨ Criar Grupo' : '🚪 Entrar no Grupo'}
+                                </button>
+
+                                {groupMode === 'create' && (
+                                    <p className="text-xs text-gray-500 mt-3 text-center">
+                                        Um ID único será gerado automaticamente para seu grupo
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Modal de Nome */}
-                    {showNameModal && (
+                    {showNameModal && !showGroupModal && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                             <div className="bg-white rounded-xl p-6 max-w-md w-full">
                                 <h3 className="text-xl font-bold text-gray-800 mb-4">Qual é o seu nome?</h3>
@@ -367,25 +528,25 @@
                         </div>
                     )}
 
-                    {/* Alerta de Configuração */}
-                    {!isConfigured && (
+                    {!isConfigured && !showGroupModal && (
                         <div className="max-w-4xl mx-auto mb-6 bg-yellow-50 border-2 border-yellow-400 rounded-lg p-4">
                             <h3 className="font-bold text-yellow-800 mb-2">⚠️ Configuração Necessária</h3>
                             <p className="text-yellow-700 text-sm">
-                                Configure a API Key e o ID da planilha no código HTML para usar o Google Sheets.
-                                Consulte o arquivo TROUBLESHOOTING.md para instruções detalhadas.
+                                Configure a API Key e o Apps Script no código HTML.
                             </p>
                         </div>
                     )}
 
                     <div className="max-w-4xl mx-auto">
-                        {/* Header */}
                         <div className="text-center mb-8">
                             <div className="flex items-center justify-center gap-3 mb-2">
                                 <span className="text-4xl">🍺</span>
                                 <h1 className="text-4xl font-bold text-amber-900">Calculadora de Cerveja</h1>
                             </div>
-                            <p className="text-amber-700">Escolham juntos o melhor custo-benefício!</p>
+                            {groupName && (
+                                <p className="text-amber-700 text-xl font-semibold">{groupName}</p>
+                            )}
+                            <p className="text-amber-600 text-sm">Escolham juntos o melhor custo-benefício!</p>
                             {userName && (
                                 <p className="text-sm text-amber-600 mt-2">
                                     Logado como: <strong>{userName}</strong>
@@ -395,271 +556,182 @@
                                     >
                                         trocar
                                     </button>
+                                    <span className="mx-2">•</span>
+                                    <button
+                                        onClick={leaveGroup}
+                                        className="text-xs underline text-red-600"
+                                    >
+                                        sair do grupo
+                                    </button>
                                 </p>
                             )}
                         </div>
 
-                        {/* Botão de Atualizar */}
                         <div className="flex justify-end mb-4">
                             <button
                                 onClick={loadFromSheets}
-                                disabled={loading || !isConfigured}
+                                disabled={loading || !isConfigured || !groupId}
                                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {loading ? '⏳ Carregando...' : '🔄 Atualizar'}
                             </button>
                         </div>
 
-                        {/* Form */}
-                        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-                            <h2 className="text-xl font-semibold text-gray-800 mb-4">Adicionar Cerveja</h2>
-                            
-                            {/* Toggle Pack/Unidade */}
-                            <div className="mb-6 flex justify-center">
-                                <div className="inline-flex rounded-lg border-2 border-amber-300 p-1 bg-amber-50">
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData({...formData, isPack: false})}
-                                        className={`px-6 py-2 rounded-md font-medium transition-all ${
-                                            !formData.isPack 
-                                                ? 'bg-amber-600 text-white shadow-md' 
-                                                : 'text-amber-700 hover:bg-amber-100'
-                                        }`}
-                                    >
-                                        Preço por Unidade
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setFormData({...formData, isPack: true})}
-                                        className={`px-6 py-2 rounded-md font-medium transition-all ${
-                                            formData.isPack 
-                                                ? 'bg-amber-600 text-white shadow-md' 
-                                                : 'text-amber-700 hover:bg-amber-100'
-                                        }`}
-                                    >
-                                        Preço por Pack
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Nome/Marca
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={formData.name}
-                                        onChange={(e) => setFormData({...formData, name: e.target.value})}
-                                        placeholder="Ex: Brahma, Skol..."
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Mercado/Loja/App
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={formData.store}
-                                        onChange={(e) => setFormData({...formData, store: e.target.value})}
-                                        placeholder="Ex: Carrefour, Zé Delivery..."
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        {formData.isPack ? 'Preço do Pack (R$)' : 'Preço por Unidade (R$)'}
-                                    </label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        value={formData.price}
-                                        onChange={(e) => setFormData({...formData, price: e.target.value})}
-                                        placeholder={formData.isPack ? "Ex: 58.68" : "Ex: 4.89"}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Tipo de embalagem
-                                    </label>
-                                    <select
-                                        value={formData.type}
-                                        onChange={(e) => handleTypeChange(e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                    >
-                                        <option value="lata">Lata</option>
-                                        <option value="longneck">Long Neck</option>
-                                        <option value="garrafa">Garrafa</option>
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        ML por unidade
-                                    </label>
-                                    <select
-                                        value={formData.mlPerUnit}
-                                        onChange={(e) => setFormData({...formData, mlPerUnit: e.target.value})}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                    >
-                                        {mlOptions[formData.type].map(option => (
-                                            <option key={option.value} value={option.value}>
-                                                {option.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                {formData.isPack ? (
-                                    <>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Unidades por pack
-                                            </label>
-                                            <input
-                                                type="number"
-                                                value={formData.unitsPerPack}
-                                                onChange={(e) => setFormData({...formData, unitsPerPack: e.target.value})}
-                                                placeholder="Ex: 6, 12, 24"
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                            />
+                        {/* Resto do código igual ao anterior... form, results, etc */}
+                        {groupId && (
+                            <>
+                                {/* Form */}
+                                <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+                                    <h2 className="text-xl font-semibold text-gray-800 mb-4">Adicionar Cerveja</h2>
+                                    
+                                    <div className="mb-6 flex justify-center">
+                                        <div className="inline-flex rounded-lg border-2 border-amber-300 p-1 bg-amber-50">
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({...formData, isPack: false})}
+                                                className={`px-6 py-2 rounded-md font-medium transition-all ${
+                                                    !formData.isPack 
+                                                        ? 'bg-amber-600 text-white shadow-md' 
+                                                        : 'text-amber-700 hover:bg-amber-100'
+                                                }`}
+                                            >
+                                                Preço por Unidade
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({...formData, isPack: true})}
+                                                className={`px-6 py-2 rounded-md font-medium transition-all ${
+                                                    formData.isPack 
+                                                        ? 'bg-amber-600 text-white shadow-md' 
+                                                        : 'text-amber-700 hover:bg-amber-100'
+                                                }`}
+                                            >
+                                                Preço por Pack
+                                            </button>
                                         </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Quantidade de packs
-                                            </label>
-                                            <input
-                                                type="number"
-                                                value={formData.numberOfPacks}
-                                                onChange={(e) => setFormData({...formData, numberOfPacks: e.target.value})}
-                                                placeholder="Ex: 1, 2, 3"
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                            />
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Quantidade de unidades
-                                        </label>
-                                        <input
-                                            type="number"
-                                            value={formData.numberOfUnits}
-                                            onChange={(e) => setFormData({...formData, numberOfUnits: e.target.value})}
-                                            placeholder="Ex: 6, 12, 24"
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                                        />
                                     </div>
-                                )}
-                            </div>
 
-                            <button
-                                onClick={addBeer}
-                                className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 rounded-lg transition-colors"
-                            >
-                                ➕ Adicionar Cerveja
-                            </button>
-                        </div>
-
-                        {/* Results */}
-                        {beers.length > 0 && (
-                            <div className="bg-white rounded-xl shadow-lg p-6">
-                                <h2 className="text-xl font-semibold text-gray-800 mb-4">Comparação</h2>
-                                
-                                {bestDeal && (
-                                    <div className="bg-green-50 border-2 border-green-500 rounded-lg p-4 mb-6">
-                                        <h3 className="font-bold text-green-800 mb-2">🏆 Melhor Custo-Benefício!</h3>
-                                        <p className="text-green-700">
-                                            <strong>{bestDeal.name}</strong> - R$ {bestDeal.pricePerLiter.toFixed(2)}/litro
-                                        </p>
-                                        {bestDeal.store && (
-                                            <p className="text-sm text-green-600 mt-1">
-                                                📍 {bestDeal.store}
-                                            </p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Nome/Marca</label>
+                                            <input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ex: Brahma, Skol..." className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Mercado/Loja/App</label>
+                                            <input type="text" value={formData.store} onChange={(e) => setFormData({...formData, store: e.target.value})} placeholder="Ex: Carrefour..." className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">{formData.isPack ? 'Preço do Pack (R$)' : 'Preço por Unidade (R$)'}</label>
+                                            <input type="number" step="0.01" value={formData.price} onChange={(e) => setFormData({...formData, price: e.target.value})} placeholder={formData.isPack ? "Ex: 58.68" : "Ex: 4.89"} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de embalagem</label>
+                                            <select value={formData.type} onChange={(e) => handleTypeChange(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                                <option value="lata">Lata</option>
+                                                <option value="longneck">Long Neck</option>
+                                                <option value="garrafa">Garrafa</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">ML por unidade</label>
+                                            <select value={formData.mlPerUnit} onChange={(e) => setFormData({...formData, mlPerUnit: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                                {mlOptions[formData.type].map(option => (
+                                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        {formData.isPack ? (
+                                            <>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">Unidades por pack</label>
+                                                    <input type="number" value={formData.unitsPerPack} onChange={(e) => setFormData({...formData, unitsPerPack: e.target.value})} placeholder="Ex: 6, 12, 24" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade de packs</label>
+                                                    <input type="number" value={formData.numberOfPacks} onChange={(e) => setFormData({...formData, numberOfPacks: e.target.value})} placeholder="Ex: 1, 2, 3" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade de unidades</label>
+                                                <input type="number" value={formData.numberOfUnits} onChange={(e) => setFormData({...formData, numberOfUnits: e.target.value})} placeholder="Ex: 6, 12, 24" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                                            </div>
                                         )}
-                                        <p className="text-sm text-green-600 mt-1">
-                                            Adicionado por: {bestDeal.addedBy}
-                                        </p>
+                                    </div>
+
+                                    <button onClick={addBeer} className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 rounded-lg">
+                                        ➕ Adicionar Cerveja
+                                    </button>
+                                </div>
+
+                                {/* Results */}
+                                {beers.length > 0 && (
+                                    <div className="bg-white rounded-xl shadow-lg p-6">
+                                        <h2 className="text-xl font-semibold text-gray-800 mb-4">Comparação</h2>
+                                        
+                                        {bestDeal && (
+                                            <div className="bg-green-50 border-2 border-green-500 rounded-lg p-4 mb-6">
+                                                <h3 className="font-bold text-green-800 mb-2">🏆 Melhor Custo-Benefício!</h3>
+                                                <p className="text-green-700">
+                                                    <strong>{bestDeal.name}</strong> - R$ {bestDeal.pricePerLiter.toFixed(2)}/litro
+                                                </p>
+                                                {bestDeal.store && <p className="text-sm text-green-600 mt-1">📍 {bestDeal.store}</p>}
+                                                <p className="text-sm text-green-600 mt-1">Adicionado por: {bestDeal.addedBy}</p>
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-3">
+                                            {sortedBeers.map((beer, index) => (
+                                                <div key={beer.id} className={`border-2 rounded-lg p-4 ${beer.id === bestDeal?.id ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
+                                                    <div className="flex justify-between items-start mb-3">
+                                                        <div className="flex-1">
+                                                            <h3 className="font-bold text-lg text-gray-800">
+                                                                {index === 0 && '🏆 '}
+                                                                {beer.name}
+                                                            </h3>
+                                                            {beer.store && <p className="text-sm text-blue-600 font-medium">📍 {beer.store}</p>}
+                                                            <p className="text-sm text-gray-600">
+                                                                {beer.packInfo && <span className="text-amber-600">{beer.packInfo} • </span>}
+                                                                {beer.quantity}x {beer.mlPerUnit}ml ({beer.type})
+                                                            </p>
+                                                            <p className="text-xs text-gray-500 mt-1">
+                                                                Adicionado por: {beer.addedBy}
+                                                                {beer.timestamp && ` • ${beer.timestamp}`}
+                                                            </p>
+                                                        </div>
+                                                        <button onClick={() => deleteBeer(beer)} className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded" title="Remover cerveja">🗑️</button>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                                        <div className="bg-white rounded p-2 border border-gray-200">
+                                                            <p className="text-gray-600 text-xs">Preço Total</p>
+                                                            <p className="font-semibold text-amber-700">R$ {beer.price.toFixed(2)}</p>
+                                                        </div>
+                                                        <div className="bg-white rounded p-2 border border-gray-200">
+                                                            <p className="text-gray-600 text-xs">Por Litro</p>
+                                                            <p className="font-semibold text-amber-700">R$ {beer.pricePerLiter.toFixed(2)}</p>
+                                                        </div>
+                                                        <div className="bg-white rounded p-2 border border-gray-200">
+                                                            <p className="text-gray-600 text-xs">Por Unidade</p>
+                                                            <p className="font-semibold text-amber-700">R$ {beer.pricePerUnit.toFixed(2)}</p>
+                                                        </div>
+                                                        <div className="bg-white rounded p-2 border border-gray-200">
+                                                            <p className="text-gray-600 text-xs">Total</p>
+                                                            <p className="font-semibold text-amber-700">{beer.totalLiters.toFixed(2)}L</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
 
-                                <div className="space-y-3">
-                                    {sortedBeers.map((beer, index) => (
-                                        <div
-                                            key={beer.id}
-                                            className={`border-2 rounded-lg p-4 transition-all ${
-                                                beer.id === bestDeal?.id 
-                                                    ? 'border-green-500 bg-green-50' 
-                                                    : 'border-gray-200 bg-gray-50'
-                                            }`}
-                                        >
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div className="flex-1">
-                                                    <h3 className="font-bold text-lg text-gray-800">
-                                                        {index === 0 && '🏆 '}
-                                                        {beer.name}
-                                                    </h3>
-                                                    {beer.store && (
-                                                        <p className="text-sm text-blue-600 font-medium">
-                                                            📍 {beer.store}
-                                                        </p>
-                                                    )}
-                                                    <p className="text-sm text-gray-600">
-                                                        {beer.packInfo && <span className="text-amber-600">{beer.packInfo} • </span>}
-                                                        {beer.quantity}x {beer.mlPerUnit}ml ({beer.type})
-                                                    </p>
-                                                    <p className="text-xs text-gray-500 mt-1">
-                                                        Adicionado por: {beer.addedBy}
-                                                        {beer.timestamp && ` • ${beer.timestamp}`}
-                                                    </p>
-                                                </div>
-                                                <button
-                                                    onClick={() => deleteBeer(beer)}
-                                                    className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded transition-colors"
-                                                    title="Remover cerveja"
-                                                >
-                                                    🗑️
-                                                </button>
-                                            </div>
-
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                                                <div className="bg-white rounded p-2 border border-gray-200">
-                                                    <p className="text-gray-600 text-xs">Preço Total</p>
-                                                    <p className="font-semibold text-amber-700">R$ {beer.price.toFixed(2)}</p>
-                                                </div>
-                                                <div className="bg-white rounded p-2 border border-gray-200">
-                                                    <p className="text-gray-600 text-xs">Por Litro</p>
-                                                    <p className="font-semibold text-amber-700">R$ {beer.pricePerLiter.toFixed(2)}</p>
-                                                </div>
-                                                <div className="bg-white rounded p-2 border border-gray-200">
-                                                    <p className="text-gray-600 text-xs">Por Unidade</p>
-                                                    <p className="font-semibold text-amber-700">R$ {beer.pricePerUnit.toFixed(2)}</p>
-                                                </div>
-                                                <div className="bg-white rounded p-2 border border-gray-200">
-                                                    <p className="text-gray-600 text-xs">Total</p>
-                                                    <p className="font-semibold text-amber-700">{beer.totalLiters.toFixed(2)}L</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {beers.length === 0 && (
-                            <div className="bg-white rounded-xl shadow-lg p-12 text-center">
-                                <span className="text-6xl">🍺</span>
-                                <p className="text-gray-500 mt-4">
-                                    {!isConfigured 
-                                        ? 'Configure a API Key e o ID da planilha para começar!'
-                                        : 'Nenhuma cerveja adicionada ainda!'}
-                                </p>
-                            </div>
+                                {beers.length === 0 && (
+                                    <div className="bg-white rounded-xl shadow-lg p-12 text-center">
+                                        <span className="text-6xl">🍺</span>
+                                        <p className="text-gray-500 mt-4">Nenhuma cerveja adicionada ainda!</p>
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
                 </div>

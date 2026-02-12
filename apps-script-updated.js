@@ -1,35 +1,77 @@
-// CÓDIGO ATUALIZADO DO GOOGLE APPS SCRIPT
-// Copie este código e substitua o que está no Apps Script
+// APPS SCRIPT PARA GRUPOS SIMPLES
+// Cole este código no Google Apps Script
 
 function doPost(e) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Cervejas');
-    
-    if (!sheet) {
-      throw new Error('Aba "Cervejas" não encontrada');
-    }
-    
     const data = JSON.parse(e.postData.contents);
     
-    // Garantir que o preço seja salvo como número decimal
-    const price = parseFloat(data.price);
+    // Criar grupo
+    if (data.action === 'create_group') {
+      const groupsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Grupos');
+      
+      if (!groupsSheet) {
+        throw new Error('Aba "Grupos" não encontrada');
+      }
+      
+      groupsSheet.appendRow([
+        data.groupId,
+        data.groupName,
+        data.groupCode
+      ]);
+      
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: true, action: 'group_created' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     
-    // Adicionar linha na planilha
-    sheet.appendRow([
-      data.addedBy || '',
-      data.name || '',
-      data.store || '',
-      price,  // Número decimal
-      data.quantity || 0,
-      data.mlPerUnit || 0,
-      data.type || '',
-      data.isPack || false,
-      data.packInfo || '',
-      data.timestamp || ''
-    ]);
+    // Adicionar cerveja
+    if (data.action === 'add_beer') {
+      const beersSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Cervejas');
+      
+      if (!beersSheet) {
+        throw new Error('Aba "Cervejas" não encontrada');
+      }
+      
+      const price = parseFloat(data.price);
+      
+      beersSheet.appendRow([
+        data.addedBy || '',
+        data.name || '',
+        data.store || '',
+        price,
+        data.quantity || 0,
+        data.mlPerUnit || 0,
+        data.type || '',
+        data.isPack || false,
+        data.packInfo || '',
+        data.timestamp || '',
+        data.groupId || '',  // Coluna K - ID do Grupo
+        false                // Coluna L - Deletado
+      ]);
+      
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: true, action: 'beer_added' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    // Deletar cerveja (soft delete)
+    if (data.action === 'delete_beer') {
+      const beersSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Cervejas');
+      
+      if (!beersSheet) {
+        throw new Error('Aba "Cervejas" não encontrada');
+      }
+      
+      const rowIndex = data.rowIndex;
+      beersSheet.getRange(rowIndex, 12).setValue(true);  // Coluna L (12)
+      
+      return ContentService
+        .createTextOutput(JSON.stringify({ success: true, action: 'beer_deleted' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     
     return ContentService
-      .createTextOutput(JSON.stringify({ success: true }))
+      .createTextOutput(JSON.stringify({ success: false, error: 'Ação não reconhecida' }))
       .setMimeType(ContentService.MimeType.JSON);
       
   } catch (error) {
@@ -65,8 +107,3 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
-
-// IMPORTANTE: Configure a coluna D (Preço Total) na planilha como "Número" com 2 casas decimais
-// 1. Selecione a coluna D inteira
-// 2. Vá em Formatar > Número > Número
-// 3. Configure para 2 casas decimais
