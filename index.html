@@ -219,7 +219,7 @@
                     
                     if (data.error) {
                         console.error('❌ Erro da API:', data.error);
-                        alert(`Erro: ${data.error.message}`);
+                        // alert(`Erro: ${data.error.message}`);
                         setLoading(false);
                         return;
                     }
@@ -270,7 +270,7 @@
                     }
                 } catch (error) {
                     console.error('❌ Erro ao carregar:', error);
-                    alert('Erro ao carregar dados.');
+                    // alert('Erro ao carregar dados.');
                 }
                 setLoading(false);
             };
