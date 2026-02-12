@@ -42,6 +42,15 @@
             const [showGroupCode, setShowGroupCode] = useState(false);
             const [groupConfirmation, setGroupConfirmation] = useState(null); // { groupId, groupName, groupCode }
             const [copied, setCopied] = useState(false);
+
+            // Histórico de grupos do dispositivo
+            const getSavedGroups = () => {
+                try { return JSON.parse(localStorage.getItem('savedGroups') || '[]'); }
+                catch { return []; }
+            };
+            const [savedGroups, setSavedGroups] = useState(getSavedGroups);
+            // 'list' = lista de grupos salvos | 'form' = criar/entrar com código
+            const [groupModalMode, setGroupModalMode] = useState(getSavedGroups().length > 0 ? 'list' : 'form');
             
             const [formData, setFormData] = useState({
                 name: '',
@@ -129,6 +138,7 @@
                     localStorage.setItem('groupId', newGroupId);
                     localStorage.setItem('groupName', formGroupName);
                     localStorage.setItem('groupCode', newGroupCode);
+                    saveGroupToHistory(newGroupId, formGroupName, newGroupCode);
                     
                     setGroupId(newGroupId);
                     setGroupName(formGroupName);
@@ -179,6 +189,7 @@
                 localStorage.setItem('groupId', foundId);
                 localStorage.setItem('groupName', foundName);
                 localStorage.setItem('groupCode', foundCode);
+                saveGroupToHistory(foundId, foundName, foundCode);
                 setGroupId(foundId);
                 setGroupName(foundName);
                 setGroupConfirmation(null);
@@ -187,7 +198,37 @@
                 loadFromSheets();
             };
 
-            // Sair do grupo
+            // Salvar grupo no histórico do dispositivo
+            const saveGroupToHistory = (id, name, code) => {
+                const groups = getSavedGroups();
+                const already = groups.find(g => g.groupId === id);
+                if (!already) {
+                    const updated = [...groups, { groupId: id, groupName: name, groupCode: code }];
+                    localStorage.setItem('savedGroups', JSON.stringify(updated));
+                    setSavedGroups(updated);
+                }
+            };
+
+            // Remover grupo do histórico (não sai, só remove da lista)
+            const removeGroupFromHistory = (id) => {
+                const updated = getSavedGroups().filter(g => g.groupId !== id);
+                localStorage.setItem('savedGroups', JSON.stringify(updated));
+                setSavedGroups(updated);
+            };
+
+            // Entrar em um grupo da lista salva
+            const enterSavedGroup = (group) => {
+                localStorage.setItem('groupId', group.groupId);
+                localStorage.setItem('groupName', group.groupName);
+                localStorage.setItem('groupCode', group.groupCode);
+                setGroupId(group.groupId);
+                setGroupName(group.groupName);
+                setShowGroupModal(false);
+                if (!localStorage.getItem('userName')) setShowNameModal(true);
+                loadFromSheets();
+            };
+
+            // Sair do grupo ativo (volta para a lista)
             const leaveGroup = () => {
                 if (confirm('Tem certeza que deseja sair do grupo?')) {
                     localStorage.removeItem('groupId');
@@ -196,6 +237,8 @@
                     setGroupId('');
                     setGroupName('');
                     setBeers([]);
+                    const groups = getSavedGroups();
+                    setGroupModalMode(groups.length > 0 ? 'list' : 'form');
                     setShowGroupModal(true);
                 }
             };
@@ -220,7 +263,6 @@
                     
                     if (data.error) {
                         console.error('❌ Erro da API:', data.error);
-                        // alert(`Erro: ${data.error.message}`);
                         setLoading(false);
                         return;
                     }
@@ -271,7 +313,6 @@
                     }
                 } catch (error) {
                     console.error('❌ Erro ao carregar:', error);
-                    // alert('Erro ao carregar dados.');
                 }
                 setLoading(false);
             };
@@ -519,91 +560,145 @@
                     {showGroupModal && !groupConfirmation && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                             <div className="bg-white rounded-xl p-6 max-w-md w-full">
-                                <h3 className="text-2xl font-bold text-gray-800 mb-4 text-center">
+                                <h3 className="text-2xl font-bold text-gray-800 mb-1 text-center">
                                     🍺 Calculadora de Cerveja
                                 </h3>
-                                
-                                <div className="flex gap-2 mb-6">
-                                    <button
-                                        onClick={() => { setGroupMode('create'); setShowError(''); }}
-                                        className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
-                                            groupMode === 'create'
-                                                ? 'bg-amber-600 text-white'
-                                                : 'bg-gray-200 text-gray-700'
-                                        }`}
-                                    >
-                                        Criar Grupo
-                                    </button>
-                                    <button
-                                        onClick={() => { setGroupMode('enter'); setShowError(''); }}
-                                        className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
-                                            groupMode === 'enter'
-                                                ? 'bg-amber-600 text-white'
-                                                : 'bg-gray-200 text-gray-700'
-                                        }`}
-                                    >
-                                        Entrar em Grupo
-                                    </button>
-                                </div>
+                                {userName && (
+                                    <p className="text-center text-sm text-amber-600 mb-4">Olá, <strong>{userName}</strong>!</p>
+                                )}
 
-                                {groupMode === 'create' ? (
-                                    <div className="space-y-3">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Nome do Grupo
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={formGroupName}
-                                                onChange={(e) => setFormGroupName(e.target.value)}
-                                                onKeyPress={(e) => e.key === 'Enter' && createGroup()}
-                                                placeholder="Ex: Viagem Praia 2026"
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                                autoFocus
-                                            />
-                                            <p className="text-xs text-gray-500 mt-1">
-                                                O código de acesso será gerado automaticamente.
-                                            </p>
+                                {/* Tela: lista de grupos salvos */}
+                                {groupModalMode === 'list' && (
+                                    <div>
+                                        <p className="text-sm text-gray-500 mb-3">Seus grupos neste dispositivo:</p>
+                                        <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
+                                            {savedGroups.map(group => (
+                                                <div key={group.groupId} className="flex items-center gap-2 border border-gray-200 rounded-lg p-3 hover:bg-amber-50 transition-colors">
+                                                    <button
+                                                        onClick={() => enterSavedGroup(group)}
+                                                        className="flex-1 text-left"
+                                                    >
+                                                        <p className="font-semibold text-gray-800">{group.groupName}</p>
+                                                        <p className="text-xs font-mono text-amber-600">{group.groupCode}</p>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (confirm(`Remover "${group.groupName}" da lista?`)) {
+                                                                removeGroupFromHistory(group.groupId);
+                                                            }
+                                                        }}
+                                                        className="text-gray-300 hover:text-red-400 transition-colors p-1 flex-shrink-0"
+                                                        title="Remover da lista"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            ))}
                                         </div>
-                                        {showError && (
-                                            <div className="bg-red-50 border border-red-300 text-red-700 px-3 py-2 rounded-lg text-sm">
-                                                {showError}
-                                            </div>
-                                        )}
                                         <button
-                                            onClick={createGroup}
-                                            className="w-full bg-amber-600 text-white py-3 rounded-lg font-semibold mt-2 hover:bg-amber-700"
+                                            onClick={() => { setGroupModalMode('form'); setShowError(''); }}
+                                            className="w-full border-2 border-dashed border-amber-300 text-amber-700 py-2 rounded-lg font-medium hover:bg-amber-50 transition-colors text-sm"
                                         >
-                                            ✨ Criar Grupo
+                                            + Entrar em outro grupo ou criar novo
                                         </button>
                                     </div>
-                                ) : (
-                                    <div className="space-y-3">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Código do Grupo
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={formGroupCode}
-                                                onChange={(e) => setFormGroupCode(e.target.value.toUpperCase())}
-                                                onKeyPress={(e) => e.key === 'Enter' && lookupGroup()}
-                                                placeholder="Ex: VIA-7K3X"
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono tracking-widest text-center text-lg"
-                                                autoFocus
-                                            />
+                                )}
+
+                                {/* Tela: criar ou entrar com código */}
+                                {groupModalMode === 'form' && (
+                                    <div>
+                                        <div className="flex gap-2 mb-6">
+                                            <button
+                                                onClick={() => { setGroupMode('create'); setShowError(''); }}
+                                                className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
+                                                    groupMode === 'create'
+                                                        ? 'bg-amber-600 text-white'
+                                                        : 'bg-gray-200 text-gray-700'
+                                                }`}
+                                            >
+                                                Criar Grupo
+                                            </button>
+                                            <button
+                                                onClick={() => { setGroupMode('enter'); setShowError(''); }}
+                                                className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
+                                                    groupMode === 'enter'
+                                                        ? 'bg-amber-600 text-white'
+                                                        : 'bg-gray-200 text-gray-700'
+                                                }`}
+                                            >
+                                                Entrar em Grupo
+                                            </button>
                                         </div>
-                                        {showError && (
-                                            <div className="bg-red-50 border border-red-300 text-red-700 px-3 py-2 rounded-lg text-sm">
-                                                {showError}
+
+                                        {groupMode === 'create' ? (
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                        Nome do Grupo
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={formGroupName}
+                                                        onChange={(e) => setFormGroupName(e.target.value)}
+                                                        onKeyPress={(e) => e.key === 'Enter' && createGroup()}
+                                                        placeholder="Ex: Viagem Praia 2026"
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                                        autoFocus
+                                                    />
+                                                    <p className="text-xs text-gray-500 mt-1">
+                                                        O código de acesso será gerado automaticamente.
+                                                    </p>
+                                                </div>
+                                                {showError && (
+                                                    <div className="bg-red-50 border border-red-300 text-red-700 px-3 py-2 rounded-lg text-sm">
+                                                        {showError}
+                                                    </div>
+                                                )}
+                                                <button
+                                                    onClick={createGroup}
+                                                    className="w-full bg-amber-600 text-white py-3 rounded-lg font-semibold mt-2 hover:bg-amber-700"
+                                                >
+                                                    ✨ Criar Grupo
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                        Código do Grupo
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={formGroupCode}
+                                                        onChange={(e) => setFormGroupCode(e.target.value.toUpperCase())}
+                                                        onKeyPress={(e) => e.key === 'Enter' && lookupGroup()}
+                                                        placeholder="Ex: VIA-7K3X"
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono tracking-widest text-center text-lg"
+                                                        autoFocus
+                                                    />
+                                                </div>
+                                                {showError && (
+                                                    <div className="bg-red-50 border border-red-300 text-red-700 px-3 py-2 rounded-lg text-sm">
+                                                        {showError}
+                                                    </div>
+                                                )}
+                                                <button
+                                                    onClick={lookupGroup}
+                                                    className="w-full bg-amber-600 text-white py-3 rounded-lg font-semibold mt-2 hover:bg-amber-700"
+                                                >
+                                                    🔍 Buscar Grupo
+                                                </button>
                                             </div>
                                         )}
-                                        <button
-                                            onClick={lookupGroup}
-                                            className="w-full bg-amber-600 text-white py-3 rounded-lg font-semibold mt-2 hover:bg-amber-700"
-                                        >
-                                            🔍 Buscar Grupo
-                                        </button>
+
+                                        {savedGroups.length > 0 && (
+                                            <button
+                                                onClick={() => { setGroupModalMode('list'); setShowError(''); }}
+                                                className="w-full text-amber-600 text-sm mt-3 hover:underline"
+                                            >
+                                                ← Voltar para meus grupos
+                                            </button>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -707,7 +802,7 @@
                                     </button>
                                 </div>
                             )}
-                            <p className="text-amber-600 text-sm">Escolham juntos o melhor custo-benefício!</p>
+                            <p className="text-amber-600 text-sm">Levamos a escolha da cerveja absurdamente a sério.</p>
                             {userName && (
                                 <p className="text-sm text-amber-600 mt-2">
                                     Logado como: <strong>{userName}</strong>
