@@ -263,13 +263,12 @@
                     
                     if (data.error) {
                         console.error('❌ Erro da API:', data.error);
-                        alert(`Erro: ${data.error.message}`);
                         setLoading(false);
                         return;
                     }
                     
                     if (data.values && data.values.length > 1) {
-                        // Chave de deduplicação: Nome + Mercado + Tipo + ML + Grupo
+                        // Chave de deduplicação: Nome + Mercado + Tipo + ML + Grupo + Pack + Pack Info
                         // Pega só o registro mais recente de cada combinação (último na planilha = mais recente)
                         const deduped = new Map();
                         data.values.slice(1).forEach((row, index) => {
@@ -279,6 +278,8 @@
                                 String(row[2] || '').trim().toLowerCase(),  // Mercado
                                 String(row[6] || '').trim().toLowerCase(),  // Tipo
                                 String(row[5] || '').trim(),                // ML
+                                String(row[7] || '').trim(),                // Pack
+                                String(row[8] || '').trim(),                // Pack Info
                                 String(row[10] || '').trim()                // Grupo
                             ].join('|');
                             // Sobrescreve sempre — o último (mais recente) vence
@@ -329,7 +330,6 @@
                     }
                 } catch (error) {
                     console.error('❌ Erro ao carregar:', error);
-                    alert('Erro ao carregar dados.');
                 }
                 setLoading(false);
             };
@@ -870,7 +870,7 @@
                                     </button>
                                 </div>
                             )}
-                            <p className="text-amber-600 text-sm">Escolham juntos o melhor custo-benefício!</p>
+                            <p className="text-amber-600 text-sm">Levamos a escolha da cerveja absurdamente a sério.</p>
                             {userName && (
                                 <p className="text-sm text-amber-600 mt-2">
                                     Logado como: <strong>{userName}</strong>
