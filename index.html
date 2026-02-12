@@ -264,7 +264,7 @@
 
             // Salvar no Google Sheets
             const saveToSheets = async (beer) => {
-                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'https://script.google.com/macros/s/AKfycbwyE2GBwG5C3KyKdDjynmXiTlLPLy68kFNCWx7ZB3dQdcmDYJHhreGX751IEEHJORMUlw/exec') {
+                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === appsScriptUrl) {
                     console.log('⚠️ Apps Script URL não configurada.');
                     return;
                 }
@@ -285,14 +285,20 @@
                         groupId: groupId
                     };
                     
-                    await fetch(CONFIG.appsScriptUrl, {
+                    const response = await fetch(CONFIG.appsScriptUrl, {
                         method: 'POST',
-                        mode: 'no-cors',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify(payload)
                     });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success && result.rowIndex) {
+                        // Update the beer with the correct rowIndex
+                        beer.rowIndex = result.rowIndex;
+                    }
                     
                     await new Promise(resolve => setTimeout(resolve, 2000));
                     await loadFromSheets();
@@ -372,7 +378,7 @@
 
             // Marcar cerveja como deletada
             const deleteFromSheets = async (beer) => {
-                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'https://script.google.com/macros/s/AKfycbwyE2GBwG5C3KyKdDjynmXiTlLPLy68kFNCWx7ZB3dQdcmDYJHhreGX751IEEHJORMUlw/exec') {
+                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === appsScriptUrl) {
                     console.log('⚠️ Apps Script URL não configurada.');
                     return;
                 }
@@ -383,7 +389,6 @@
                         rowIndex: beer.rowIndex
                     };
                     
-                    // Remove 'no-cors' mode to allow proper communication
                     const response = await fetch(CONFIG.appsScriptUrl, {
                         method: 'POST',
                         headers: {

@@ -49,8 +49,10 @@ function doPost(e) {
         false                // Coluna L - Deletado
       ]);
       
+      // Return the row index of the newly added beer
+      const rowIndex = beersSheet.getLastRow();
       return ContentService
-        .createTextOutput(JSON.stringify({ success: true, action: 'beer_added' }))
+        .createTextOutput(JSON.stringify({ success: true, action: 'beer_added', rowIndex: rowIndex }))
         .setMimeType(ContentService.MimeType.JSON);
     }
     
