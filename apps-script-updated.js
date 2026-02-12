@@ -24,7 +24,7 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
     
-    // Adicionar cerveja
+    // Adicionar cerveja (também usado para soft delete — campo deleted=true)
     if (data.action === 'add_beer') {
       const beersSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Cervejas');
       
@@ -33,6 +33,7 @@ function doPost(e) {
       }
       
       const price = parseFloat(data.price);
+      const deleted = data.deleted === true || data.deleted === 'true';
       
       beersSheet.appendRow([
         data.addedBy || '',
@@ -45,28 +46,12 @@ function doPost(e) {
         data.isPack || false,
         data.packInfo || '',
         data.timestamp || '',
-        data.groupId || '',  // Coluna K - ID do Grupo
-        false                // Coluna L - Deletado
+        data.groupId || '',
+        deleted
       ]);
       
       return ContentService
         .createTextOutput(JSON.stringify({ success: true, action: 'beer_added' }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    // Deletar cerveja (soft delete)
-    if (data.action === 'delete_beer') {
-      const beersSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Cervejas');
-      
-      if (!beersSheet) {
-        throw new Error('Aba "Cervejas" não encontrada');
-      }
-      
-      const rowIndex = data.rowIndex;
-      beersSheet.getRange(rowIndex, 12).setValue(true);  // Coluna L (12)
-      
-      return ContentService
-        .createTextOutput(JSON.stringify({ success: true, action: 'beer_deleted' }))
         .setMimeType(ContentService.MimeType.JSON);
     }
     
