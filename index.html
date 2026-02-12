@@ -210,7 +210,7 @@
                     
                     if (data.error) {
                         console.error('❌ Erro da API:', data.error);
-                        alert(`Erro: ${data.error.message}`);
+                        // alert(`Erro: ${data.error.message}`);
                         setLoading(false);
                         return;
                     }
@@ -257,7 +257,7 @@
                     }
                 } catch (error) {
                     console.error('❌ Erro ao carregar:', error);
-                    alert('Erro ao carregar dados.');
+                    // alert('Erro ao carregar dados.');
                 }
                 setLoading(false);
             };
@@ -383,16 +383,20 @@
                         rowIndex: beer.rowIndex
                     };
                     
-                    await fetch(CONFIG.appsScriptUrl, {
+                    // Remove 'no-cors' mode to allow proper communication
+                    const response = await fetch(CONFIG.appsScriptUrl, {
                         method: 'POST',
-                        mode: 'no-cors',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify(payload)
                     });
                     
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    const result = await response.json();
+                    console.log('Delete result:', result);
+                    
+                    // Wait a bit for the update to propagate
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                     await loadFromSheets();
                     
                 } catch (error) {
