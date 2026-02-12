@@ -217,8 +217,9 @@
                     
                     if (data.values && data.values.length > 1) {
                         const loadedBeers = data.values.slice(1)
-                            .filter(row => row[10] === groupId && row[11] !== 'true' && row[11] !== true) // Filtrar pelo ID do grupo (coluna K) e não deletados (coluna L)
-                            .map((row, index) => {
+                            .map((row, index) => ({ row, realRowIndex: index + 2 })) // captura o índice real ANTES do filter
+                            .filter(({ row }) => row[10] === groupId && row[11] !== 'true' && row[11] !== true)
+                            .map(({ row, realRowIndex }, index) => {
                                 let priceValue = 0;
                                 if (row[3]) {
                                     const priceStr = String(row[3]).replace(',', '.');
@@ -239,7 +240,7 @@
                                     timestamp: row[9] || '',
                                     groupId: row[10] || '',
                                     deleted: row[11] === 'true' || row[11] === true,
-                                    rowIndex: index + 2
+                                    rowIndex: realRowIndex
                                 };
 
                                 beer.totalMl = beer.quantity * beer.mlPerUnit;
@@ -323,7 +324,7 @@
                     packInfo = `${formData.numberOfPacks}x pack de ${formData.unitsPerPack}`;
                 } else {
                     totalQuantity = parseInt(formData.numberOfUnits);
-                    totalPrice = parseFloat(formData.price) * totalQuantity;
+                    totalPrice = parseFloat(formData.price);
                 }
 
                 const now = new Date();
@@ -370,41 +371,15 @@
                 });
             };
 
-            // Marcar cerveja como deletada
-            const deleteFromSheets = async (beer) => {
-                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'SUA_URL_DO_APPS_SCRIPT_AQUI') {
-                    console.log('⚠️ Apps Script URL não configurada.');
-                    return;
-                }
+            // Marcar cerveja como deletada - DESATIVADO
+            // Para remover uma entrada, o dono do app deve editar a planilha manualmente.
 
-                try {
-                    const payload = {
-                        action: 'delete_beer',
-                        rowIndex: beer.rowIndex
-                    };
-                    
-                    await fetch(CONFIG.appsScriptUrl, {
-                        method: 'POST',
-                        mode: 'no-cors',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(payload)
-                    });
-                    
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    await loadFromSheets();
-                    
-                } catch (error) {
-                    console.error('❌ Erro ao deletar:', error);
-                }
-            };
+            const [showDeleteMessage, setShowDeleteMessage] = useState(false);
+            const [beerToDelete, setBeerToDelete] = useState(null);
 
-            const deleteBeer = async (beer) => {
-                if (confirm(`Tem certeza que deseja remover "${beer.name}"?`)) {
-                    setBeers(beers.filter(b => b.id !== beer.id));
-                    await deleteFromSheets(beer);
-                }
+            const deleteBeer = (beer) => {
+                setBeerToDelete(beer);
+                setShowDeleteMessage(true);
             };
 
             useEffect(() => {
@@ -430,6 +405,33 @@
 
             return (
                 <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 p-4 md:p-8">
+                    {/* Modal de Solicitar Remoção */}
+                    {showDeleteMessage && beerToDelete && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-xl p-6 max-w-md w-full">
+                                <div className="text-center">
+                                    <div className="text-5xl mb-3">🗑️</div>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">Remover entrada</h3>
+                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-left">
+                                        <p className="font-semibold text-gray-800">{beerToDelete.name}</p>
+                                        {beerToDelete.store && <p className="text-sm text-gray-600">📍 {beerToDelete.store}</p>}
+                                        <p className="text-sm text-gray-500">Adicionado por: {beerToDelete.addedBy}</p>
+                                    </div>
+                                    <p className="text-gray-600 text-sm mb-4">
+                                        A remoção de registros é feita pelo dono do app.<br/>
+                                        Entre em contato e solicite a exclusão desta entrada.
+                                    </p>
+                                    <button
+                                        onClick={() => { setShowDeleteMessage(false); setBeerToDelete(null); }}
+                                        className="w-full bg-amber-600 text-white py-2 rounded-lg font-semibold"
+                                    >
+                                        Entendido
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Modal de Sucesso */}
                     {showSuccess && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
