@@ -263,16 +263,32 @@
                     
                     if (data.error) {
                         console.error('❌ Erro da API:', data.error);
+                        alert(`Erro: ${data.error.message}`);
                         setLoading(false);
                         return;
                     }
                     
                     if (data.values && data.values.length > 1) {
-                        const loadedBeers = data.values.slice(1)
-                            .map((row, index) => ({ row, realRowIndex: index + 2 })) // captura o índice real ANTES do filter
+                        // Chave de deduplicação: Nome + Mercado + Tipo + ML + Grupo
+                        // Pega só o registro mais recente de cada combinação (último na planilha = mais recente)
+                        const deduped = new Map();
+                        data.values.slice(1).forEach((row, index) => {
+                            if (row[10] !== groupId) return;
+                            const key = [
+                                String(row[1] || '').trim().toLowerCase(),  // Nome
+                                String(row[2] || '').trim().toLowerCase(),  // Mercado
+                                String(row[6] || '').trim().toLowerCase(),  // Tipo
+                                String(row[5] || '').trim(),                // ML
+                                String(row[10] || '').trim()                // Grupo
+                            ].join('|');
+                            // Sobrescreve sempre — o último (mais recente) vence
+                            deduped.set(key, { row, realRowIndex: index + 2 });
+                        });
+
+                        const loadedBeers = Array.from(deduped.values())
                             .filter(({ row }) => {
                                 const deleted = String(row[11] ?? '').trim().toUpperCase();
-                                return row[10] === groupId && deleted !== 'TRUE' && deleted !== 'VERDADEIRO';
+                                return deleted !== 'TRUE' && deleted !== 'VERDADEIRO';
                             })
                             .map(({ row, realRowIndex }, index) => {
                                 let priceValue = 0;
@@ -313,6 +329,7 @@
                     }
                 } catch (error) {
                     console.error('❌ Erro ao carregar:', error);
+                    alert('Erro ao carregar dados.');
                 }
                 setLoading(false);
             };
@@ -337,7 +354,8 @@
                         isPack: beer.isPack,
                         packInfo: beer.packInfo || '',
                         timestamp: beer.timestamp,
-                        groupId: groupId
+                        groupId: groupId,
+                        deleted: false
                     };
                     
                     await fetch(CONFIG.appsScriptUrl, {
@@ -427,11 +445,54 @@
                 });
             };
 
-            // Marcar cerveja como deletada - DESATIVADO
-            // Para remover uma entrada, o dono do app deve editar a planilha manualmente.
-
             const [showDeleteMessage, setShowDeleteMessage] = useState(false);
             const [beerToDelete, setBeerToDelete] = useState(null);
+
+            // Soft delete: envia novo registro idêntico com Deletado=TRUE e timestamp atualizado
+            const confirmDeleteBeer = async () => {
+                const beer = beerToDelete;
+                setShowDeleteMessage(false);
+                setBeerToDelete(null);
+
+                // Remove otimisticamente da UI
+                setBeers(prev => prev.filter(b => b.id !== beer.id));
+
+                try {
+                    const now = new Date();
+                    const timestamp = now.toLocaleString('pt-BR', {
+                        day: '2-digit', month: '2-digit', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit'
+                    });
+
+                    const payload = {
+                        action: 'add_beer',
+                        addedBy: userName,   // quem deletou
+                        name: beer.name,
+                        store: beer.store,
+                        price: parseFloat(beer.price.toFixed(2)),
+                        quantity: beer.quantity,
+                        mlPerUnit: beer.mlPerUnit,
+                        type: beer.type,
+                        isPack: beer.isPack,
+                        packInfo: beer.packInfo || '',
+                        timestamp: timestamp,
+                        groupId: beer.groupId,
+                        deleted: true
+                    };
+
+                    await fetch(CONFIG.appsScriptUrl, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    await loadFromSheets();
+                } catch (error) {
+                    console.error('❌ Erro ao deletar:', error);
+                }
+            };
 
             const deleteBeer = (beer) => {
                 setBeerToDelete(beer);
@@ -461,28 +522,35 @@
 
             return (
                 <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 p-4 md:p-8">
-                    {/* Modal de Solicitar Remoção */}
+                    {/* Modal de Confirmar Remoção */}
                     {showDeleteMessage && beerToDelete && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                             <div className="bg-white rounded-xl p-6 max-w-md w-full">
                                 <div className="text-center">
                                     <div className="text-5xl mb-3">🗑️</div>
-                                    <h3 className="text-xl font-bold text-gray-800 mb-2">Remover entrada</h3>
+                                    <h3 className="text-xl font-bold text-gray-800 mb-2">Remover entrada?</h3>
                                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-left">
                                         <p className="font-semibold text-gray-800">{beerToDelete.name}</p>
                                         {beerToDelete.store && <p className="text-sm text-gray-600">📍 {beerToDelete.store}</p>}
                                         <p className="text-sm text-gray-500">Adicionado por: {beerToDelete.addedBy}</p>
                                     </div>
-                                    <p className="text-gray-600 text-sm mb-4">
-                                        A remoção de registros é feita pelo dono do app.<br/>
-                                        Entre em contato e solicite a exclusão desta entrada.
+                                    <p className="text-gray-500 text-sm mb-5">
+                                        Esta entrada será removida para todos no grupo.
                                     </p>
-                                    <button
-                                        onClick={() => { setShowDeleteMessage(false); setBeerToDelete(null); }}
-                                        className="w-full bg-amber-600 text-white py-2 rounded-lg font-semibold"
-                                    >
-                                        Entendido
-                                    </button>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => { setShowDeleteMessage(false); setBeerToDelete(null); }}
+                                            className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-300"
+                                        >
+                                            Cancelar
+                                        </button>
+                                        <button
+                                            onClick={confirmDeleteBeer}
+                                            className="flex-1 bg-red-500 text-white py-2 rounded-lg font-semibold hover:bg-red-600"
+                                        >
+                                            Remover
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -802,7 +870,7 @@
                                     </button>
                                 </div>
                             )}
-                            <p className="text-amber-600 text-sm">Levamos a escolha da cerveja absurdamente a sério.</p>
+                            <p className="text-amber-600 text-sm">Escolham juntos o melhor custo-benefício!</p>
                             {userName && (
                                 <p className="text-sm text-amber-600 mt-2">
                                     Logado como: <strong>{userName}</strong>
