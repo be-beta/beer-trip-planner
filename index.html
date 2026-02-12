@@ -218,7 +218,10 @@
                     if (data.values && data.values.length > 1) {
                         const loadedBeers = data.values.slice(1)
                             .map((row, index) => ({ row, realRowIndex: index + 2 })) // captura o índice real ANTES do filter
-                            .filter(({ row }) => row[10] === groupId && row[11] !== 'true' && row[11] !== true)
+                            .filter(({ row }) => {
+                                const deleted = String(row[11] ?? '').trim().toUpperCase();
+                                return row[10] === groupId && deleted !== 'TRUE' && deleted !== 'VERDADEIRO';
+                            })
                             .map(({ row, realRowIndex }, index) => {
                                 let priceValue = 0;
                                 if (row[3]) {
