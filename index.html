@@ -210,7 +210,7 @@
                     
                     if (data.error) {
                         console.error('❌ Erro da API:', data.error);
-                        // alert(`Erro: ${data.error.message}`);
+                        alert(`Erro: ${data.error.message}`);
                         setLoading(false);
                         return;
                     }
@@ -257,14 +257,14 @@
                     }
                 } catch (error) {
                     console.error('❌ Erro ao carregar:', error);
-                    // alert('Erro ao carregar dados.');
+                    alert('Erro ao carregar dados.');
                 }
                 setLoading(false);
             };
 
             // Salvar no Google Sheets
             const saveToSheets = async (beer) => {
-                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === appsScriptUrl) {
+                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'https://script.google.com/macros/s/AKfycbwyE2GBwG5C3KyKdDjynmXiTlLPLy68kFNCWx7ZB3dQdcmDYJHhreGX751IEEHJORMUlw/exec') {
                     console.log('⚠️ Apps Script URL não configurada.');
                     return;
                 }
@@ -285,20 +285,14 @@
                         groupId: groupId
                     };
                     
-                    const response = await fetch(CONFIG.appsScriptUrl, {
+                    await fetch(CONFIG.appsScriptUrl, {
                         method: 'POST',
+                        mode: 'no-cors',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify(payload)
                     });
-                    
-                    const result = await response.json();
-                    
-                    if (result.success && result.rowIndex) {
-                        // Update the beer with the correct rowIndex
-                        beer.rowIndex = result.rowIndex;
-                    }
                     
                     await new Promise(resolve => setTimeout(resolve, 2000));
                     await loadFromSheets();
@@ -378,7 +372,7 @@
 
             // Marcar cerveja como deletada
             const deleteFromSheets = async (beer) => {
-                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === appsScriptUrl) {
+                if (!CONFIG.appsScriptUrl || CONFIG.appsScriptUrl === 'https://script.google.com/macros/s/AKfycbwyE2GBwG5C3KyKdDjynmXiTlLPLy68kFNCWx7ZB3dQdcmDYJHhreGX751IEEHJORMUlw/exec') {
                     console.log('⚠️ Apps Script URL não configurada.');
                     return;
                 }
@@ -389,19 +383,16 @@
                         rowIndex: beer.rowIndex
                     };
                     
-                    const response = await fetch(CONFIG.appsScriptUrl, {
+                    await fetch(CONFIG.appsScriptUrl, {
                         method: 'POST',
+                        mode: 'no-cors',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify(payload)
                     });
                     
-                    const result = await response.json();
-                    console.log('Delete result:', result);
-                    
-                    // Wait a bit for the update to propagate
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, 2000));
                     await loadFromSheets();
                     
                 } catch (error) {
