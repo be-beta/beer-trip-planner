@@ -217,7 +217,7 @@
                     
                     if (data.values && data.values.length > 1) {
                         const loadedBeers = data.values.slice(1)
-                            .filter(row => row[10] === groupId && row[11] !== 'true' && row[11] !== true) // Filtrar pelo ID do grupo (coluna K) e não deletados (coluna L)
+                            .filter(row => row[10] === groupId && row[11] !== 'true' && row[11] !== 'TRUE' && row[11] !== 'VERDADEIRO' && row[11] !== true) // Filtrar pelo ID do grupo (coluna K) e não deletados (coluna L)
                             .map((row, index) => {
                                 let priceValue = 0;
                                 if (row[3]) {
