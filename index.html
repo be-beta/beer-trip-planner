@@ -502,6 +502,27 @@
                 setShowDeleteMessage(true);
             };
 
+            // Migração: garante que grupos já salvos no formato antigo aparecem na lista
+            useEffect(() => {
+                const existingId   = localStorage.getItem('groupId');
+                const existingName = localStorage.getItem('groupName');
+                const existingCode = localStorage.getItem('groupCode');
+                if (existingId && existingName) {
+                    const groups = getSavedGroups();
+                    const already = groups.find(g => g.groupId === existingId);
+                    if (!already) {
+                        const updated = [...groups, {
+                            groupId:   existingId,
+                            groupName: existingName,
+                            groupCode: existingCode || ''
+                        }];
+                        localStorage.setItem('savedGroups', JSON.stringify(updated));
+                        setSavedGroups(updated);
+                        setGroupModalMode('list');
+                    }
+                }
+            }, []);
+
             useEffect(() => {
                 if (groupId) {
                     loadFromSheets();
