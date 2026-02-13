@@ -235,17 +235,15 @@
 
             // Sair do grupo ativo (volta para a lista)
             const leaveGroup = () => {
-                if (confirm('Tem certeza que deseja sair do grupo?')) {
-                    localStorage.removeItem('groupId');
-                    localStorage.removeItem('groupName');
-                    localStorage.removeItem('groupCode');
-                    setGroupId('');
-                    setGroupName('');
-                    setBeers([]);
-                    const groups = getSavedGroups();
-                    setGroupModalMode(groups.length > 0 ? 'list' : 'form');
-                    setShowGroupModal(true);
-                }
+                localStorage.removeItem('groupId');
+                localStorage.removeItem('groupName');
+                localStorage.removeItem('groupCode');
+                setGroupId('');
+                setGroupName('');
+                setBeers([]);
+                const groups = getSavedGroups();
+                setGroupModalMode(groups.length > 0 ? 'list' : 'form');
+                setShowGroupModal(true);
             };
 
             // Carregar dados do Google Sheets
