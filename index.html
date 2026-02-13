@@ -42,6 +42,8 @@
             const [showGroupCode, setShowGroupCode] = useState(false);
             const [groupConfirmation, setGroupConfirmation] = useState(null); // { groupId, groupName, groupCode }
             const [copied, setCopied] = useState(false);
+            const [formCollapsed, setFormCollapsed] = useState(false);
+            const [mestreCollapsed, setMestreCollapsed] = useState(true);
 
             // Histórico de grupos do dispositivo
             const getSavedGroups = () => {
@@ -502,27 +504,6 @@
                 setShowDeleteMessage(true);
             };
 
-            // Migração: garante que grupos já salvos no formato antigo aparecem na lista
-            useEffect(() => {
-                const existingId   = localStorage.getItem('groupId');
-                const existingName = localStorage.getItem('groupName');
-                const existingCode = localStorage.getItem('groupCode');
-                if (existingId && existingName) {
-                    const groups = getSavedGroups();
-                    const already = groups.find(g => g.groupId === existingId);
-                    if (!already) {
-                        const updated = [...groups, {
-                            groupId:   existingId,
-                            groupName: existingName,
-                            groupCode: existingCode || ''
-                        }];
-                        localStorage.setItem('savedGroups', JSON.stringify(updated));
-                        setSavedGroups(updated);
-                        setGroupModalMode('list');
-                    }
-                }
-            }, []);
-
             useEffect(() => {
                 if (groupId) {
                     loadFromSheets();
@@ -896,22 +877,26 @@
                                 </div>
                             )}
                             {userName && (
-                                <p className="text-sm text-amber-600 mt-2">
-                                    Logado como: <strong>{userName}</strong>
-                                    <button
-                                        onClick={() => setShowNameModal(true)}
-                                        className="ml-2 text-xs underline"
-                                    >
-                                        trocar
-                                    </button>
-                                    <span className="mx-2">•</span>
-                                    <button
-                                        onClick={leaveGroup}
-                                        className="text-xs underline text-red-600"
-                                    >
-                                        sair do grupo
-                                    </button>
-                                </p>
+                                <div className="mt-2">
+                                    <p className="text-sm text-amber-600">
+                                        Logado como: <strong>{userName}</strong>
+                                        <button
+                                            onClick={() => setShowNameModal(true)}
+                                            className="ml-1.5 text-amber-500 hover:text-amber-700 transition-colors"
+                                            title="Editar nome"
+                                        >
+                                            ✏️
+                                        </button>
+                                    </p>
+                                    {groupName && (
+                                        <button
+                                            onClick={leaveGroup}
+                                            className="text-xs text-amber-500 hover:text-amber-700 mt-0.5 transition-colors"
+                                        >
+                                            🔀 Mudar de grupo
+                                        </button>
+                                    )}
+                                </div>
                             )}
                         </div>
 
@@ -925,12 +910,18 @@
                             </button>
                         </div>
 
-                        {/* Resto do código igual ao anterior... form, results, etc */}
                         {groupId && (
                             <>
-                                {/* Form */}
-                                <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-                                    <h2 className="text-xl font-semibold text-gray-800 mb-4">Adicionar Cerveja</h2>
+                                {/* Form com collapse */}
+                                <div className="bg-white rounded-xl shadow-lg mb-6 overflow-hidden">
+                                    <button
+                                        onClick={() => setFormCollapsed(!formCollapsed)}
+                                        className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors"
+                                    >
+                                        <h2 className="text-xl font-semibold text-gray-800">➕ Adicionar Cerveja</h2>
+                                        <span className="text-gray-400 text-lg">{formCollapsed ? '▼' : '▲'}</span>
+                                    </button>
+                                    {!formCollapsed && <div className="px-6 pb-6">
                                     
                                     <div className="mb-6 flex justify-center">
                                         <div className="inline-flex rounded-lg border-2 border-amber-300 p-1 bg-amber-50">
@@ -1010,12 +1001,75 @@
                                     <button onClick={addBeer} className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 rounded-lg">
                                         ➕ Adicionar Cerveja
                                     </button>
+                                    </div>}
                                 </div>
 
-                                {/* Results */}
+                                {/* Mestre Cervejeiro */}
+                                {beers.length > 0 && (() => {
+                                    // Salvador da Pátria: quem cadastrou a melhor cerveja (topo do ranking)
+                                    const salvador = sortedBeers[0]?.addedBy || null;
+
+                                    // Agente de Campo: quem cadastrou mais cervejas
+                                    const contagem = beers.reduce((acc, b) => {
+                                        acc[b.addedBy] = (acc[b.addedBy] || 0) + 1;
+                                        return acc;
+                                    }, {});
+                                    const agente = Object.entries(contagem).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+                                    // Tá na Disney: pior média de custo-benefício, excluindo o Agente de Campo
+                                    const medias = beers.reduce((acc, b) => {
+                                        if (!acc[b.addedBy]) acc[b.addedBy] = { total: 0, count: 0 };
+                                        acc[b.addedBy].total += b.pricePerLiter;
+                                        acc[b.addedBy].count += 1;
+                                        return acc;
+                                    }, {});
+                                    const disney = Object.entries(medias)
+                                        .filter(([name]) => name !== agente)
+                                        .map(([name, v]) => ({ name, avg: v.total / v.count }))
+                                        .sort((a, b) => b.avg - a.avg)[0]?.name || null;
+
+                                    return (
+                                        <div className="bg-white rounded-xl shadow-lg mb-6 overflow-hidden">
+                                            <button
+                                                onClick={() => setMestreCollapsed(!mestreCollapsed)}
+                                                className="w-full flex items-center justify-between p-5 text-left hover:bg-gray-50 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xl">🏅</span>
+                                                    <h2 className="text-lg font-semibold text-gray-800">Mestre Cervejeiro</h2>
+                                                </div>
+                                                <span className="text-gray-400 text-lg">{mestreCollapsed ? '▼' : '▲'}</span>
+                                            </button>
+                                            {!mestreCollapsed && (
+                                                <div className="px-5 pb-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                                                        <div className="text-3xl mb-1">🦸</div>
+                                                        <p className="font-bold text-green-800 text-sm">Salvador da Pátria</p>
+                                                        <p className="text-green-600 font-semibold mt-1">{salvador || '—'}</p>
+                                                        <p className="text-xs text-green-500 mt-1">encontrou a melhor cerveja</p>
+                                                    </div>
+                                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+                                                        <div className="text-3xl mb-1">🕵️</div>
+                                                        <p className="font-bold text-blue-800 text-sm">Agente de Campo</p>
+                                                        <p className="text-blue-600 font-semibold mt-1">{agente || '—'}</p>
+                                                        <p className="text-xs text-blue-500 mt-1">registrou mais cervejas</p>
+                                                    </div>
+                                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
+                                                        <div className="text-3xl mb-1">🎢</div>
+                                                        <p className="font-bold text-amber-800 text-sm">Tá na Disney</p>
+                                                        <p className="text-amber-600 font-semibold mt-1">{disney || (agente ? '—' : '—')}</p>
+                                                        <p className="text-xs text-amber-500 mt-1">só olha cerveja de rico</p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Ranking */}
                                 {beers.length > 0 && (
                                     <div className="bg-white rounded-xl shadow-lg p-6">
-                                        <h2 className="text-xl font-semibold text-gray-800 mb-4">Comparação</h2>
+                                        <h2 className="text-xl font-semibold text-gray-800 mb-4">Ranking</h2>
                                         
                                         {bestDeal && (
                                             <div className="bg-green-50 border-2 border-green-500 rounded-lg p-4 mb-6">
