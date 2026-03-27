@@ -5,13 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CervaScore</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍺</text></svg>">
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Spicy+Rice&display=swap" rel="stylesheet">
+    
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'media',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        };
+    </script>
     <script src="https://apis.google.com/js/api.js"></script>
 </head>
-<body>
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 antialiased font-sans transition-colors duration-200">
     <div id="root"></div>
 
     <script type="text/babel">
@@ -44,6 +61,7 @@
             const [copied, setCopied] = useState(false);
             const [formCollapsed, setFormCollapsed] = useState(false);
             const [mestreCollapsed, setMestreCollapsed] = useState(true);
+            const [filterRecent, setFilterRecent] = useState(true);
 
             // Histórico de grupos do dispositivo
             const getSavedGroups = () => {
@@ -327,7 +345,12 @@
                             });
                         
                         console.log('✅ Cervejas carregadas:', loadedBeers.length);
-                        setBeers(loadedBeers);
+                        setBeers(prev => {
+                            if (prev.length === 0 && loadedBeers.length > 0) {
+                                setFormCollapsed(true);
+                            }
+                            return loadedBeers;
+                        });
                     } else {
                         setBeers([]);
                     }
@@ -517,14 +540,62 @@
                 }
             }, [showError]);
 
-            const sortedBeers = [...beers].sort((a, b) => a.pricePerLiter - b.pricePerLiter);
+            const parseDate = (timestampStr) => {
+                if (!timestampStr) return new Date(0);
+                try {
+                    let datePart = timestampStr;
+                    let timePart = "00:00:00";
+                    if (timestampStr.includes(', ')) {
+                        const parts = timestampStr.split(', ');
+                        datePart = parts[0];
+                        timePart = parts[1] || "00:00:00";
+                    } else if (timestampStr.includes(' ')) {
+                        const parts = timestampStr.split(' ');
+                        datePart = parts[0];
+                        timePart = parts[1] || "00:00:00";
+                    }
+                    
+                    if (datePart.includes('/')) {
+                        const [day, month, year] = datePart.split('/');
+                        const [hour, minute, second] = timePart.split(':');
+                        return new Date(year, month - 1, day, hour || 0, minute || 0, parseInt(second) || 0);
+                    }
+                    
+                    const d = new Date(timestampStr);
+                    if (isNaN(d.getTime())) return new Date(0);
+                    return d;
+                } catch {
+                    return new Date(0);
+                }
+            };
+
+            const getDaysAgo = (timestampStr) => {
+                if (!timestampStr) return null;
+                const d = parseDate(timestampStr);
+                const diffTime = Math.abs(new Date() - d);
+                return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            };
+
+            const getDaysColorClass = (days) => {
+                if (days === null) return "text-gray-500 dark:text-gray-400";
+                if (days <= 7) return "text-emerald-500 font-bold drop-shadow-sm";
+                if (days <= 14) return "text-yellow-600 dark:text-yellow-500 font-semibold";
+                if (days <= 25) return "text-orange-500 font-semibold";
+                return "text-red-500 font-bold drop-shadow-sm";
+            };
+
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            
+            const filteredBeers = filterRecent ? beers.filter(beer => parseDate(beer.timestamp) >= thirtyDaysAgo) : beers;
+            const sortedBeers = [...filteredBeers].sort((a, b) => a.pricePerLiter - b.pricePerLiter);
             const bestDeal = sortedBeers[0];
 
             const isConfigured = CONFIG.apiKey !== 'SUA_API_KEY_AQUI' && 
                                 CONFIG.spreadsheetId !== 'SEU_SPREADSHEET_ID_AQUI';
 
             return (
-                <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 p-4 md:p-8">
+                <div className="min-h-screen bg-transparent p-4 md:p-8 transition-colors duration-200">
                     {/* Modal de Confirmar Remoção */}
                     {showDeleteMessage && beerToDelete && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -600,11 +671,11 @@
 
                     {/* Toast de Erro */}
                     {showError && (
-                        <div className="fixed top-4 right-4 bg-red-500 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slide-in">
+                        <div className="fixed top-4 right-4 bg-red-500 dark:bg-red-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-slide-in">
                             <p>{showError}</p>
                             <button
                                 onClick={() => setShowError('')}
-                                className="absolute top-1 right-2 text-white hover:text-gray-200"
+                                className="absolute top-1 right-2 text-white/80 hover:text-white transition-colors"
                             >
                                 ×
                             </button>
@@ -629,28 +700,28 @@
 
                     {/* Modal de Grupo */}
                     {showGroupModal && !groupConfirmation && (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                            <div className="bg-white rounded-xl p-6 max-w-md w-full">
-                                <h3 className="text-2xl font-bold text-gray-800 mb-1 text-center">
+                        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity">
+                            <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-md w-full shadow-2xl border border-gray-100 dark:border-gray-700">
+                                <h3 className="text-2xl font-bold text-gray-800 dark:text-white mb-2 text-center">
                                     🍺 Calculadora de Cerveja
                                 </h3>
                                 {userName && (
-                                    <p className="text-center text-sm text-amber-600 mb-4">Olá, <strong>{userName}</strong>!</p>
+                                    <p className="text-center text-sm text-amber-600 dark:text-amber-400 mb-5">Olá, <strong>{userName}</strong>!</p>
                                 )}
 
                                 {/* Tela: lista de grupos salvos */}
                                 {groupModalMode === 'list' && (
                                     <div>
-                                        <p className="text-sm text-gray-500 mb-3">Seus grupos neste dispositivo:</p>
-                                        <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Seus grupos neste dispositivo:</p>
+                                        <div className="space-y-2 mb-4 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
                                             {savedGroups.map(group => (
-                                                <div key={group.groupId} className="flex items-center gap-2 border border-gray-200 rounded-lg p-3 hover:bg-amber-50 transition-colors">
+                                                <div key={group.groupId} className="flex items-center gap-2 border border-gray-200 dark:border-gray-700 rounded-xl p-3 hover:bg-amber-50 dark:hover:bg-gray-700/50 transition-colors">
                                                     <button
                                                         onClick={() => enterSavedGroup(group)}
                                                         className="flex-1 text-left"
                                                     >
-                                                        <p className="font-semibold text-gray-800">{group.groupName}</p>
-                                                        <p className="text-xs font-mono text-amber-600">{group.groupCode}</p>
+                                                        <p className="font-semibold text-gray-800 dark:text-gray-200">{group.groupName}</p>
+                                                        <p className="text-xs font-mono text-amber-600 dark:text-amber-400">{group.groupCode}</p>
                                                     </button>
                                                     <button
                                                         onClick={() => {
@@ -658,7 +729,7 @@
                                                                 removeGroupFromHistory(group.groupId);
                                                             }
                                                         }}
-                                                        className="text-gray-300 hover:text-red-400 transition-colors p-1 flex-shrink-0"
+                                                        className="text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors p-1 flex-shrink-0"
                                                         title="Remover da lista"
                                                     >
                                                         ✕
@@ -668,7 +739,7 @@
                                         </div>
                                         <button
                                             onClick={() => { setGroupModalMode('form'); setShowError(''); }}
-                                            className="w-full border-2 border-dashed border-amber-300 text-amber-700 py-2 rounded-lg font-medium hover:bg-amber-50 transition-colors text-sm"
+                                            className="w-full border-2 border-dashed border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-500 py-2.5 rounded-xl font-medium hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors text-sm"
                                         >
                                             + Entrar em outro grupo ou criar novo
                                         </button>
@@ -681,20 +752,20 @@
                                         <div className="flex gap-2 mb-6">
                                             <button
                                                 onClick={() => { setGroupMode('create'); setShowError(''); }}
-                                                className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
+                                                className={`flex-1 py-2.5 rounded-xl font-semibold transition-all ${
                                                     groupMode === 'create'
-                                                        ? 'bg-amber-600 text-white'
-                                                        : 'bg-gray-200 text-gray-700'
+                                                        ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+                                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                                                 }`}
                                             >
                                                 Criar Grupo
                                             </button>
                                             <button
                                                 onClick={() => { setGroupMode('enter'); setShowError(''); }}
-                                                className={`flex-1 py-2 rounded-lg font-semibold transition-all ${
+                                                className={`flex-1 py-2.5 rounded-xl font-semibold transition-all ${
                                                     groupMode === 'enter'
-                                                        ? 'bg-amber-600 text-white'
-                                                        : 'bg-gray-200 text-gray-700'
+                                                        ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
+                                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                                                 }`}
                                             >
                                                 Entrar em Grupo
@@ -702,9 +773,9 @@
                                         </div>
 
                                         {groupMode === 'create' ? (
-                                            <div className="space-y-3">
+                                            <div className="space-y-4">
                                                 <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                                                         Nome do Grupo
                                                     </label>
                                                     <input
@@ -713,29 +784,29 @@
                                                         onChange={(e) => setFormGroupName(e.target.value)}
                                                         onKeyPress={(e) => e.key === 'Enter' && createGroup()}
                                                         placeholder="Ex: Viagem Praia 2026"
-                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all outline-none"
                                                         autoFocus
                                                     />
-                                                    <p className="text-xs text-gray-500 mt-1">
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                                                         O código de acesso será gerado automaticamente.
                                                     </p>
                                                 </div>
                                                 {showError && (
-                                                    <div className="bg-red-50 border border-red-300 text-red-700 px-3 py-2 rounded-lg text-sm">
+                                                    <div className="bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-xl text-sm">
                                                         {showError}
                                                     </div>
                                                 )}
                                                 <button
                                                     onClick={createGroup}
-                                                    className="w-full bg-amber-600 text-white py-3 rounded-lg font-semibold mt-2 hover:bg-amber-700"
+                                                    className="w-full bg-amber-600 text-white py-3.5 rounded-xl font-semibold mt-2 hover:bg-amber-700 shadow-lg shadow-amber-600/30 transition-all"
                                                 >
                                                     ✨ Criar Grupo
                                                 </button>
                                             </div>
                                         ) : (
-                                            <div className="space-y-3">
+                                            <div className="space-y-4">
                                                 <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                                                         Código do Grupo
                                                     </label>
                                                     <input
@@ -744,18 +815,18 @@
                                                         onChange={(e) => setFormGroupCode(e.target.value.toUpperCase())}
                                                         onKeyPress={(e) => e.key === 'Enter' && lookupGroup()}
                                                         placeholder="Ex: VIA-7K3X"
-                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono tracking-widest text-center text-lg"
+                                                        className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-xl font-mono tracking-widest text-center text-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all outline-none uppercase"
                                                         autoFocus
                                                     />
                                                 </div>
                                                 {showError && (
-                                                    <div className="bg-red-50 border border-red-300 text-red-700 px-3 py-2 rounded-lg text-sm">
+                                                    <div className="bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-xl text-sm">
                                                         {showError}
                                                     </div>
                                                 )}
                                                 <button
                                                     onClick={lookupGroup}
-                                                    className="w-full bg-amber-600 text-white py-3 rounded-lg font-semibold mt-2 hover:bg-amber-700"
+                                                    className="w-full bg-amber-600 text-white py-3.5 rounded-xl font-semibold mt-2 hover:bg-amber-700 shadow-lg shadow-amber-600/30 transition-all"
                                                 >
                                                     🔍 Buscar Grupo
                                                 </button>
@@ -765,7 +836,7 @@
                                         {savedGroups.length > 0 && (
                                             <button
                                                 onClick={() => { setGroupModalMode('list'); setShowError(''); }}
-                                                className="w-full text-amber-600 text-sm mt-3 hover:underline"
+                                                className="w-full text-amber-600 dark:text-amber-500 text-sm mt-5 hover:underline transition-colors block text-center"
                                             >
                                                 ← Voltar para meus grupos
                                             </button>
@@ -778,26 +849,26 @@
 
                     {/* Modal de Confirmação de Entrada no Grupo */}
                     {groupConfirmation && (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                            <div className="bg-white rounded-xl p-6 max-w-md w-full">
+                        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity">
+                            <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-md w-full shadow-2xl border border-gray-100 dark:border-gray-700">
                                 <div className="text-center">
-                                    <div className="text-5xl mb-3">🍺</div>
-                                    <h3 className="text-xl font-bold text-gray-800 mb-1">Grupo encontrado!</h3>
-                                    <p className="text-gray-500 text-sm mb-4">É esse o grupo que você quer entrar?</p>
-                                    <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 mb-6">
-                                        <p className="text-2xl font-bold text-amber-900">{groupConfirmation.groupName}</p>
-                                        <p className="text-sm text-amber-600 font-mono mt-1">{groupConfirmation.groupCode}</p>
+                                    <div className="text-5xl mb-3 animate-bounce">🍺</div>
+                                    <h3 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Grupo encontrado!</h3>
+                                    <p className="text-gray-500 dark:text-gray-400 text-sm mb-5">É esse o grupo que você quer entrar?</p>
+                                    <div className="bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-300 dark:border-amber-700/50 rounded-xl p-5 mb-6 shadow-inner">
+                                        <p className="text-2xl font-bold text-amber-900 dark:text-amber-400">{groupConfirmation.groupName}</p>
+                                        <p className="text-sm text-amber-600 dark:text-amber-500 font-mono mt-2 tracking-widest">{groupConfirmation.groupCode}</p>
                                     </div>
                                     <div className="flex gap-3">
                                         <button
                                             onClick={() => { setGroupConfirmation(null); setFormGroupCode(''); }}
-                                            className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-300"
+                                            className="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-3 rounded-xl font-semibold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                                         >
                                             ← Voltar
                                         </button>
                                         <button
                                             onClick={confirmEnterGroup}
-                                            className="flex-1 bg-amber-600 text-white py-2 rounded-lg font-semibold hover:bg-amber-700"
+                                            className="flex-1 bg-amber-600 text-white py-3 rounded-xl font-semibold hover:bg-amber-700 shadow-lg shadow-amber-600/30 transition-all"
                                         >
                                             ✅ Entrar
                                         </button>
@@ -809,20 +880,21 @@
 
                     {/* Modal de Nome */}
                     {showNameModal && !showGroupModal && (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                            <div className="bg-white rounded-xl p-6 max-w-md w-full">
-                                <h3 className="text-xl font-bold text-gray-800 mb-4">Qual é o seu nome?</h3>
+                        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity">
+                            <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-md w-full shadow-2xl border border-gray-100 dark:border-gray-700">
+                                <h3 className="text-2xl font-bold text-gray-800 dark:text-white mb-4 text-center">Qual é o seu nome?</h3>
                                 <input
                                     type="text"
                                     value={userName}
                                     onChange={(e) => setUserName(e.target.value)}
-                                    placeholder="Digite seu nome"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4"
+                                    placeholder="Ex: João Silva"
+                                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-xl mb-5 focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all outline-none"
                                     onKeyPress={(e) => e.key === 'Enter' && saveUserName()}
+                                    autoFocus
                                 />
                                 <button
                                     onClick={saveUserName}
-                                    className="w-full bg-amber-600 text-white py-2 rounded-lg font-semibold"
+                                    className="w-full bg-amber-600 text-white py-3.5 rounded-xl font-semibold hover:bg-amber-700 shadow-lg shadow-amber-600/30 transition-all"
                                 >
                                     Salvar
                                 </button>
@@ -841,17 +913,17 @@
 
                     <div className="max-w-4xl mx-auto">
                         <div className="text-center mb-8">
-                            <div className="flex items-center justify-center gap-3 mb-2">
-                                <span className="text-4xl">🍺</span>
-                                <h1 className="text-4xl font-bold text-amber-900">Calculadora de Cerveja</h1>
+                            <div className="flex items-center justify-center gap-3 mb-3 animate-fade-in-down mt-4">
+                                <h1 className="text-5xl md:text-6xl font-['Spicy_Rice'] text-amber-900 dark:text-amber-400 tracking-wide drop-shadow-sm">Calculadora de Cerveja</h1>
                             </div>
-                            <p className="text-amber-600 text-sm">Levamos a escolha da cerveja absurdamente a sério.</p>
+                            <p className="text-amber-700 dark:text-amber-500/80 text-sm font-medium">Levamos a escolha da cerveja absurdamente a sério.</p>
+                            
                             {groupName && (
-                                <div className="flex items-center justify-center gap-2">
-                                    <p className="text-amber-700 text-xl font-semibold">{groupName}</p>
+                                <div className="flex items-center justify-center gap-2 mt-3">
+                                    <p className="text-amber-800 dark:text-amber-300 text-xl font-bold bg-amber-100 dark:bg-amber-900/30 px-4 py-1.5 rounded-full shadow-sm">{groupName}</p>
                                     <button
                                         onClick={() => setShowGroupCode(!showGroupCode)}
-                                        className="text-xs bg-amber-200 hover:bg-amber-300 text-amber-800 px-2 py-1 rounded transition-colors"
+                                        className="text-xs bg-amber-200 dark:bg-amber-800 hover:bg-amber-300 dark:hover:bg-amber-700 text-amber-900 dark:text-amber-100 px-2.5 py-1.5 rounded-full transition-all shadow-sm"
                                         title={showGroupCode ? "Ocultar código" : "Mostrar código"}
                                     >
                                         {showGroupCode ? '👁️' : '🔒'}
@@ -859,15 +931,15 @@
                                 </div>
                             )}
                             {showGroupCode && (
-                                <div className="flex items-center justify-center gap-2 mt-1">
-                                    <p className="text-amber-600 text-sm font-mono tracking-widest">{localStorage.getItem('groupCode')}</p>
+                                <div className="flex items-center justify-center gap-2 mt-2 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm mx-auto max-w-[200px] py-1.5 px-3 rounded-xl border border-amber-200 dark:border-amber-900/50">
+                                    <p className="text-amber-700 dark:text-amber-400 text-sm font-mono tracking-widest font-bold select-all">{localStorage.getItem('groupCode')}</p>
                                     <button
                                         onClick={() => {
                                             navigator.clipboard.writeText(localStorage.getItem('groupCode'));
                                             setCopied(true);
                                             setTimeout(() => setCopied(false), 2000);
                                         }}
-                                        className="text-amber-500 hover:text-amber-700 hover:bg-amber-200 p-1 rounded transition-colors"
+                                        className="text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/50 p-1.5 rounded-lg transition-colors"
                                         title="Copiar código"
                                     >
                                         {copied ? '✅' : '📋'}
@@ -875,12 +947,12 @@
                                 </div>
                             )}
                             {userName && (
-                                <div className="mt-2">
-                                    <p className="text-sm text-amber-600">
-                                        Logado como: <strong>{userName}</strong>
+                                <div className="mt-4 flex flex-col items-center gap-1">
+                                    <p className="text-sm text-gray-600 dark:text-gray-400 bg-white/50 dark:bg-gray-800/50 px-3 py-1 rounded-full border border-gray-200 dark:border-gray-700/50 inline-flex items-center gap-1.5">
+                                        Logado como: <strong className="text-gray-900 dark:text-gray-100">{userName}</strong>
                                         <button
                                             onClick={() => setShowNameModal(true)}
-                                            className="ml-1.5 text-amber-500 hover:text-amber-700 transition-colors"
+                                            className="text-amber-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors ml-1"
                                             title="Editar nome"
                                         >
                                             ✏️
@@ -889,7 +961,7 @@
                                     {groupName && (
                                         <button
                                             onClick={leaveGroup}
-                                            className="text-xs text-amber-500 hover:text-amber-700 mt-0.5 transition-colors"
+                                            className="text-xs font-medium text-amber-600 dark:text-amber-500 hover:text-amber-800 dark:hover:text-amber-400 mt-1 transition-colors hover:underline"
                                         >
                                             🔀 Mudar de grupo
                                         </button>
@@ -898,38 +970,50 @@
                             )}
                         </div>
 
-                        <div className="flex justify-end mb-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-center mb-6 bg-white/50 dark:bg-gray-800/50 p-3 rounded-xl border border-gray-200 dark:border-gray-700/50 shadow-sm gap-3">
+                            <label className="flex items-center gap-2.5 cursor-pointer bg-white dark:bg-gray-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors w-full sm:w-auto">
+                                <input
+                                    type="checkbox"
+                                    checked={filterRecent}
+                                    onChange={(e) => setFilterRecent(e.target.checked)}
+                                    className="w-5 h-5 text-amber-600 rounded bg-gray-100 border-gray-300 focus:ring-amber-500 dark:focus:ring-amber-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
+                                />
+                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300 select-none">Apenas últimos 30 dias</span>
+                            </label>
                             <button
                                 onClick={loadFromSheets}
                                 disabled={loading || !isConfigured || !groupId}
-                                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center justify-center gap-2"
                             >
-                                {loading ? '⏳ Carregando...' : '🔄 Atualizar'}
+                                {loading ? '⏳ Carregando...' : '🔄 Atualizar Dados'}
                             </button>
                         </div>
 
                         {groupId && (
                             <>
                                 {/* Form com collapse */}
-                                <div className="bg-white rounded-xl shadow-lg mb-6 overflow-hidden">
+                                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 mb-6 overflow-hidden transition-all duration-300">
                                     <button
                                         onClick={() => setFormCollapsed(!formCollapsed)}
-                                        className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors"
+                                        className="w-full flex items-center justify-between p-5 md:p-6 text-left hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors group"
                                     >
-                                        <h2 className="text-xl font-semibold text-gray-800">➕ Adicionar Cerveja</h2>
-                                        <span className="text-gray-400 text-lg">{formCollapsed ? '▼' : '▲'}</span>
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-sm group-hover:scale-105 transition-transform">➕</div>
+                                            <h2 className="text-xl font-bold text-gray-800 dark:text-white">Adicionar Cerveja</h2>
+                                        </div>
+                                        <span className={`text-gray-400 dark:text-gray-500 text-lg transition-transform duration-300 transform ${formCollapsed ? 'rotate-180' : 'rotate-0'}`}>▲</span>
                                     </button>
-                                    {!formCollapsed && <div className="px-6 pb-6">
+                                    {!formCollapsed && <div className="px-5 pb-5 md:px-6 md:pb-6 animate-slide-in">
                                     
                                     <div className="mb-6 flex justify-center">
-                                        <div className="inline-flex rounded-lg border-2 border-amber-300 p-1 bg-amber-50">
+                                        <div className="inline-flex rounded-xl border border-gray-200 dark:border-gray-700 p-1 bg-gray-50 dark:bg-gray-900/30 shadow-inner">
                                             <button
                                                 type="button"
                                                 onClick={() => setFormData({...formData, isPack: false})}
-                                                className={`px-6 py-2 rounded-md font-medium transition-all ${
+                                                className={`px-5 md:px-6 py-2 rounded-lg font-medium transition-all text-sm md:text-base ${
                                                     !formData.isPack 
-                                                        ? 'bg-amber-600 text-white shadow-md' 
-                                                        : 'text-amber-700 hover:bg-amber-100'
+                                                        ? 'bg-white dark:bg-gray-800 text-amber-600 dark:text-amber-400 shadow-sm border border-gray-200 dark:border-gray-600' 
+                                                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                                                 }`}
                                             >
                                                 Preço por Unidade
@@ -937,10 +1021,10 @@
                                             <button
                                                 type="button"
                                                 onClick={() => setFormData({...formData, isPack: true})}
-                                                className={`px-6 py-2 rounded-md font-medium transition-all ${
+                                                className={`px-5 md:px-6 py-2 rounded-lg font-medium transition-all text-sm md:text-base ${
                                                     formData.isPack 
-                                                        ? 'bg-amber-600 text-white shadow-md' 
-                                                        : 'text-amber-700 hover:bg-amber-100'
+                                                        ? 'bg-white dark:bg-gray-800 text-amber-600 dark:text-amber-400 shadow-sm border border-gray-200 dark:border-gray-600' 
+                                                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                                                 }`}
                                             >
                                                 Preço por Pack
@@ -948,74 +1032,74 @@
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                        {[
+                                            { label: 'Nome/Marca', value: formData.name, setter: (v) => setFormData({...formData, name: v}), placeholder: "Ex: Brahma, Skol...", type: 'text' },
+                                            { label: 'Mercado/Loja/App', value: formData.store, setter: (v) => setFormData({...formData, store: v}), placeholder: "Ex: Carrefour...", type: 'text' },
+                                            { label: formData.isPack ? 'Preço do Pack (R$)' : 'Preço por Unidade (R$)', value: formData.price, setter: (v) => setFormData({...formData, price: v}), placeholder: formData.isPack ? "Ex: 58.68" : "Ex: 4.89", type: 'number', step: "0.01" }
+                                        ].map((input, idx) => (
+                                            <div key={idx}>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">{input.label}</label>
+                                                <input type={input.type} step={input.step} value={input.value} onChange={(e) => input.setter(e.target.value)} placeholder={input.placeholder} className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all outline-none" />
+                                            </div>
+                                        ))}
+
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Nome/Marca</label>
-                                            <input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Ex: Brahma, Skol..." className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Mercado/Loja/App</label>
-                                            <input type="text" value={formData.store} onChange={(e) => setFormData({...formData, store: e.target.value})} placeholder="Ex: Carrefour..." className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">{formData.isPack ? 'Preço do Pack (R$)' : 'Preço por Unidade (R$)'}</label>
-                                            <input type="number" step="0.01" value={formData.price} onChange={(e) => setFormData({...formData, price: e.target.value})} placeholder={formData.isPack ? "Ex: 58.68" : "Ex: 4.89"} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de embalagem</label>
-                                            <select value={formData.type} onChange={(e) => handleTypeChange(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Tipo de embalagem</label>
+                                            <select value={formData.type} onChange={(e) => handleTypeChange(e.target.value)} className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all outline-none">
                                                 <option value="lata">Lata</option>
                                                 <option value="longneck">Long Neck</option>
                                                 <option value="garrafa">Garrafa</option>
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">ML por unidade</label>
-                                            <select value={formData.mlPerUnit} onChange={(e) => setFormData({...formData, mlPerUnit: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">ML por unidade</label>
+                                            <select value={formData.mlPerUnit} onChange={(e) => setFormData({...formData, mlPerUnit: e.target.value})} className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all outline-none">
                                                 {mlOptions[formData.type].map(option => (
                                                     <option key={option.value} value={option.value}>{option.label}</option>
                                                 ))}
                                             </select>
                                         </div>
+
                                         {formData.isPack ? (
                                             <>
                                                 <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-1">Unidades por pack</label>
-                                                    <input type="number" value={formData.unitsPerPack} onChange={(e) => setFormData({...formData, unitsPerPack: e.target.value})} placeholder="Ex: 6, 12, 24" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Unidades por pack</label>
+                                                    <input type="number" value={formData.unitsPerPack} onChange={(e) => setFormData({...formData, unitsPerPack: e.target.value})} placeholder="Ex: 6, 12, 24" className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all outline-none" />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade de packs</label>
-                                                    <input type="number" value={formData.numberOfPacks} onChange={(e) => setFormData({...formData, numberOfPacks: e.target.value})} placeholder="Ex: 1, 2, 3" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Quantidade de packs</label>
+                                                    <input type="number" value={formData.numberOfPacks} onChange={(e) => setFormData({...formData, numberOfPacks: e.target.value})} placeholder="Ex: 1, 2, 3" className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all outline-none" />
                                                 </div>
                                             </>
                                         ) : (
                                             <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade de unidades</label>
-                                                <input type="number" value={formData.numberOfUnits} onChange={(e) => setFormData({...formData, numberOfUnits: e.target.value})} placeholder="Ex: 6, 12, 24" className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Quantidade de unidades</label>
+                                                <input type="number" value={formData.numberOfUnits} onChange={(e) => setFormData({...formData, numberOfUnits: e.target.value})} placeholder="Ex: 6, 12, 24" className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all outline-none" />
                                             </div>
                                         )}
                                     </div>
 
-                                    <button onClick={addBeer} className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 rounded-lg">
-                                        ➕ Adicionar Cerveja
+                                    <button onClick={addBeer} className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3.5 rounded-xl text-lg shadow-lg shadow-amber-600/30 transition-all flex items-center justify-center gap-2">
+                                        <span className="text-xl">➕</span> Adicionar Cerveja
                                     </button>
                                     </div>}
                                 </div>
 
                                 {/* Mestre Cervejeiro */}
-                                {beers.length > 0 && (() => {
+                                {filteredBeers.length > 0 && (() => {
                                     // Salvador da Pátria: quem cadastrou a melhor cerveja (topo do ranking)
                                     const salvador = sortedBeers[0]?.addedBy || null;
 
                                     // Agente de Campo: quem cadastrou mais cervejas
-                                    const contagem = beers.reduce((acc, b) => {
+                                    const contagem = filteredBeers.reduce((acc, b) => {
                                         acc[b.addedBy] = (acc[b.addedBy] || 0) + 1;
                                         return acc;
                                     }, {});
                                     const agente = Object.entries(contagem).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 
                                     // Tá na Disney: pior média de custo-benefício, excluindo o Agente de Campo
-                                    const medias = beers.reduce((acc, b) => {
+                                    const medias = filteredBeers.reduce((acc, b) => {
                                         if (!acc[b.addedBy]) acc[b.addedBy] = { total: 0, count: 0 };
                                         acc[b.addedBy].total += b.pricePerLiter;
                                         acc[b.addedBy].count += 1;
@@ -1027,36 +1111,36 @@
                                         .sort((a, b) => b.avg - a.avg)[0]?.name || null;
 
                                     return (
-                                        <div className="bg-white rounded-xl shadow-lg mb-6 overflow-hidden">
+                                        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 mb-6 overflow-hidden transition-all duration-300">
                                             <button
                                                 onClick={() => setMestreCollapsed(!mestreCollapsed)}
-                                                className="w-full flex items-center justify-between p-5 text-left hover:bg-gray-50 transition-colors"
+                                                className="w-full flex items-center justify-between p-5 md:p-6 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group"
                                             >
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xl">🏅</span>
-                                                    <h2 className="text-lg font-semibold text-gray-800">Mestre Cervejeiro</h2>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-sm group-hover:scale-105 transition-transform">🏅</div>
+                                                    <h2 className="text-xl font-bold text-gray-800 dark:text-white">Mestre Cervejeiro</h2>
                                                 </div>
-                                                <span className="text-gray-400 text-lg">{mestreCollapsed ? '▼' : '▲'}</span>
+                                                <span className={`text-gray-400 dark:text-gray-500 text-lg transition-transform duration-300 transform ${mestreCollapsed ? 'rotate-180' : 'rotate-0'}`}>▲</span>
                                             </button>
                                             {!mestreCollapsed && (
-                                                <div className="px-5 pb-5 grid grid-cols-1 md:grid-cols-3 gap-3">
-                                                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-                                                        <div className="text-3xl mb-1">🦸</div>
-                                                        <p className="font-bold text-green-800 text-sm">Salvador da Pátria</p>
-                                                        <p className="text-green-600 font-semibold mt-1">{salvador || '—'}</p>
-                                                        <p className="text-xs text-green-500 mt-1">encontrou a melhor cerveja</p>
+                                                <div className="px-5 pb-5 md:px-6 md:pb-6 grid grid-cols-1 md:grid-cols-3 gap-4 animate-slide-in">
+                                                    <div className="relative overflow-hidden bg-gradient-to-br from-green-50 to-emerald-100 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200 dark:border-green-800/50 rounded-2xl p-5 text-center shadow-sm hover:shadow-md transition-shadow">
+                                                        <div className="text-4xl mb-2 drop-shadow-sm transform hover:scale-110 transition-transform">🦸</div>
+                                                        <p className="font-extrabold text-green-800 dark:text-green-400 text-sm tracking-wide uppercase">Salvador da Pátria</p>
+                                                        <p className="text-green-700 dark:text-green-300 font-bold text-lg mt-1">{salvador || '—'}</p>
+                                                        <p className="text-xs text-green-600 dark:text-green-500/80 mt-1 font-medium">Melhor Custo Benefício</p>
                                                     </div>
-                                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-                                                        <div className="text-3xl mb-1">🕵️</div>
-                                                        <p className="font-bold text-blue-800 text-sm">Agente de Campo</p>
-                                                        <p className="text-blue-600 font-semibold mt-1">{agente || '—'}</p>
-                                                        <p className="text-xs text-blue-500 mt-1">registrou mais cervejas</p>
+                                                    <div className="relative overflow-hidden bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800/50 rounded-2xl p-5 text-center shadow-sm hover:shadow-md transition-shadow">
+                                                        <div className="text-4xl mb-2 drop-shadow-sm transform hover:scale-110 transition-transform">🕵️</div>
+                                                        <p className="font-extrabold text-blue-800 dark:text-blue-400 text-sm tracking-wide uppercase">Agente de Campo</p>
+                                                        <p className="text-blue-700 dark:text-blue-300 font-bold text-lg mt-1">{agente || '—'}</p>
+                                                        <p className="text-xs text-blue-600 dark:text-blue-500/80 mt-1 font-medium">Mais contribuições</p>
                                                     </div>
-                                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
-                                                        <div className="text-3xl mb-1">🎢</div>
-                                                        <p className="font-bold text-amber-800 text-sm">Tá na Disney</p>
-                                                        <p className="text-amber-600 font-semibold mt-1">{disney || (agente ? '—' : '—')}</p>
-                                                        <p className="text-xs text-amber-500 mt-1">só olha cerveja de rico</p>
+                                                    <div className="relative overflow-hidden bg-gradient-to-br from-amber-50 to-orange-100 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800/50 rounded-2xl p-5 text-center shadow-sm hover:shadow-md transition-shadow">
+                                                        <div className="text-4xl mb-2 drop-shadow-sm transform hover:scale-110 transition-transform">🎢</div>
+                                                        <p className="font-extrabold text-amber-800 dark:text-amber-400 text-sm tracking-wide uppercase">Tá na Disney</p>
+                                                        <p className="text-amber-700 dark:text-amber-300 font-bold text-lg mt-1">{disney || (agente ? '—' : '—')}</p>
+                                                        <p className="text-xs text-amber-600 dark:text-amber-500/80 mt-1 font-medium">Pior Custo Benefício</p>
                                                     </div>
                                                 </div>
                                             )}
@@ -1065,59 +1149,68 @@
                                 })()}
 
                                 {/* Ranking */}
-                                {beers.length > 0 && (
-                                    <div className="bg-white rounded-xl shadow-lg p-6">
-                                        <h2 className="text-xl font-semibold text-gray-800 mb-4">Ranking</h2>
+                                {filteredBeers.length > 0 && (
+                                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-5 md:p-6 mb-6">
+                                        <div className="flex items-center gap-3 mb-6">
+                                            <div className="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-sm">📊</div>
+                                            <h2 className="text-xl font-bold text-gray-800 dark:text-white">Ranking</h2>
+                                        </div>
                                         
                                         {bestDeal && (
-                                            <div className="bg-green-50 border-2 border-green-500 rounded-lg p-4 mb-6">
-                                                <h3 className="font-bold text-green-800 mb-2">🏆 Melhor Custo-Benefício!</h3>
-                                                <p className="text-green-700">
-                                                    <strong>{bestDeal.name}</strong> - R$ {bestDeal.pricePerLiter.toFixed(2)}/litro
+                                            <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-300 dark:border-green-600/50 rounded-2xl p-5 mb-6 shadow-sm relative overflow-hidden">
+                                                <div className="absolute -right-4 -top-4 text-7xl opacity-10 transform rotate-12">🏆</div>
+                                                <h3 className="font-extrabold text-green-800 dark:text-green-400 mb-2 flex items-center gap-2 drop-shadow-sm">🏆 <span className="uppercase tracking-wide text-sm">Melhor Custo-Benefício!</span></h3>
+                                                <p className="text-green-900 dark:text-green-300 text-lg">
+                                                    <strong>{bestDeal.name}</strong> • <span className="font-mono bg-green-200/50 dark:bg-green-800/50 px-2 py-0.5 rounded">R$ {bestDeal.pricePerLiter.toFixed(2)}/L</span>
                                                 </p>
-                                                {bestDeal.store && <p className="text-sm text-green-600 mt-1">📍 {bestDeal.store}</p>}
-                                                <p className="text-sm text-green-600 mt-1">Adicionado por: {bestDeal.addedBy}</p>
+                                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-3 text-sm text-green-700 dark:text-green-500/90 font-medium">
+                                                    {bestDeal.store && <p>📍 {bestDeal.store}</p>}
+                                                    <p>👤 {bestDeal.addedBy}</p>
+                                                </div>
                                             </div>
                                         )}
 
-                                        <div className="space-y-3">
+                                        <div className="space-y-4">
                                             {sortedBeers.map((beer, index) => (
-                                                <div key={beer.id} className={`border-2 rounded-lg p-4 ${beer.id === bestDeal?.id ? 'border-green-500 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
-                                                    <div className="flex justify-between items-start mb-3">
+                                                <div key={beer.id} className={`border rounded-2xl p-5 hover:shadow-md transition-all duration-300 ${beer.id === bestDeal?.id ? 'border-green-400 dark:border-green-500/50 bg-green-50/50 dark:bg-green-900/10' : 'border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50'}`}>
+                                                    <div className="flex justify-between items-start mb-4">
                                                         <div className="flex-1">
-                                                            <h3 className="font-bold text-lg text-gray-800">
-                                                                {index === 0 && '🏆 '}
+                                                            <h3 className={`font-bold text-lg mb-1 flex items-center gap-2 ${beer.id === bestDeal?.id ? 'text-green-800 dark:text-green-400' : 'text-gray-900 dark:text-white'}`}>
+                                                                {index === 0 && <span className="text-2xl drop-shadow-sm">🏆</span>}
                                                                 {beer.name}
                                                             </h3>
-                                                            {beer.store && <p className="text-sm text-blue-600 font-medium">📍 {beer.store}</p>}
-                                                            <p className="text-sm text-gray-600">
-                                                                {beer.packInfo && <span className="text-amber-600">{beer.packInfo} • </span>}
-                                                                {beer.quantity}x {beer.mlPerUnit}ml ({beer.type})
-                                                            </p>
-                                                            <p className="text-xs text-gray-500 mt-1">
-                                                                Adicionado por: {beer.addedBy}
-                                                                {beer.timestamp && ` • ${beer.timestamp}`}
+                                                            {beer.store && <p className="text-sm text-indigo-600 dark:text-indigo-400 font-semibold mb-1">📍 {beer.store}</p>}
+                                                            <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600 dark:text-gray-400 mb-2">
+                                                                {beer.packInfo && <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-md font-medium text-xs">{beer.packInfo}</span>}
+                                                                <span>{beer.quantity}x {beer.mlPerUnit}ml ({beer.type})</span>
+                                                            </div>
+                                                            <p className="text-xs text-gray-500 dark:text-gray-500 font-medium">
+                                                                👤 {beer.addedBy}
+                                                                {beer.timestamp && (() => {
+                                                                    const days = getDaysAgo(beer.timestamp);
+                                                                    const colorClass = getDaysColorClass(days);
+                                                                    return (
+                                                                        <span className="opacity-90 ml-1.5 inline-block">
+                                                                            • 🕒 {beer.timestamp.split(',')[0]} <span className={`ml-1 ${colorClass}`}>({days === 0 ? 'Hoje' : days === 1 ? 'Ontem' : `${days} dias atrás`})</span>
+                                                                        </span>
+                                                                    );
+                                                                })()}
                                                             </p>
                                                         </div>
-                                                        <button onClick={() => deleteBeer(beer)} className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded" title="Remover cerveja">🗑️</button>
+                                                        <button onClick={() => deleteBeer(beer)} className="text-red-400 dark:text-red-500 hover:text-red-600 dark:hover:text-red-400 p-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors" title="Remover cerveja">🗑️</button>
                                                     </div>
                                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                                                        <div className="bg-white rounded p-2 border border-gray-200">
-                                                            <p className="text-gray-600 text-xs">Preço Total</p>
-                                                            <p className="font-semibold text-amber-700">R$ {beer.price.toFixed(2)}</p>
-                                                        </div>
-                                                        <div className="bg-white rounded p-2 border border-gray-200">
-                                                            <p className="text-gray-600 text-xs">Por Litro</p>
-                                                            <p className="font-semibold text-amber-700">R$ {beer.pricePerLiter.toFixed(2)}</p>
-                                                        </div>
-                                                        <div className="bg-white rounded p-2 border border-gray-200">
-                                                            <p className="text-gray-600 text-xs">Por Unidade</p>
-                                                            <p className="font-semibold text-amber-700">R$ {beer.pricePerUnit.toFixed(2)}</p>
-                                                        </div>
-                                                        <div className="bg-white rounded p-2 border border-gray-200">
-                                                            <p className="text-gray-600 text-xs">Total</p>
-                                                            <p className="font-semibold text-amber-700">{beer.totalLiters.toFixed(2)}L</p>
-                                                        </div>
+                                                        {[
+                                                            { label: 'Total', val: `R$ ${beer.price.toFixed(2)}` },
+                                                            { label: 'Por Litro', val: `R$ ${beer.pricePerLiter.toFixed(2)}` },
+                                                            { label: 'Por Unidade', val: `R$ ${beer.pricePerUnit.toFixed(2)}` },
+                                                            { label: 'Volume', val: `${beer.totalLiters.toFixed(2)}L` }
+                                                        ].map((stat, i) => (
+                                                            <div key={i} className={`bg-white dark:bg-gray-900 rounded-xl p-3 border ${beer.id === bestDeal?.id ? 'border-green-200 dark:border-green-800/50' : 'border-gray-200 dark:border-gray-700'}`}>
+                                                                <p className="text-gray-500 dark:text-gray-400 text-xs font-medium tracking-wide uppercase mb-1">{stat.label}</p>
+                                                                <p className={`font-bold font-mono ${beer.id === bestDeal?.id ? 'text-green-700 dark:text-green-400' : 'text-gray-900 dark:text-gray-100'}`}>{stat.val}</p>
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 </div>
                                             ))}
@@ -1125,10 +1218,11 @@
                                     </div>
                                 )}
 
-                                {beers.length === 0 && (
-                                    <div className="bg-white rounded-xl shadow-lg p-12 text-center">
-                                        <span className="text-6xl">🍺</span>
-                                        <p className="text-gray-500 mt-4">Nenhuma cerveja adicionada ainda!</p>
+                                {filteredBeers.length === 0 && (
+                                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-12 text-center">
+                                        <div className="text-7xl mb-6 animate-pulse drop-shadow-md">🍺</div>
+                                        <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">A lista está vazia!</h3>
+                                        <p className="text-gray-500 dark:text-gray-400 mb-4">Adicione a primeira cerveja para começar o ranking do grupo.</p>
                                     </div>
                                 )}
                             </>
